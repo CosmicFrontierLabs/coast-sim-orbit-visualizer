@@ -19,6 +19,8 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.staticfiles import StaticFiles
 
 from conops.targets.plan_schema import PlanSchema
 
@@ -39,8 +41,13 @@ app.add_middleware(
 _DEFAULT_PLANS_DIR = Path(__file__).parent.parent.parent / "examples"
 PLANS_DIR = Path(os.environ.get("PLANS_DIR", str(_DEFAULT_PLANS_DIR)))
 
+_DIST_DIR = Path(__file__).parent.parent / "dist"
+_MODEL_DIR = Path(__file__).parent.parent / "model"
+_TEXTURES_DIR = Path(__file__).parent.parent / "textures"
+
 # In-memory DITL payload set by launch() / set_data()
 _data: dict | None = None
+_viz_data: dict | None = None
 
 
 def set_data(payload: dict) -> None:
@@ -49,9 +56,38 @@ def set_data(payload: dict) -> None:
     _data = payload
 
 
+def set_viz_data(payload: dict) -> None:
+    """Load the 3-D VizData payload for the frontend."""
+    global _viz_data
+    _viz_data = payload
+
+
 # ---------------------------------------------------------------------------
 # DITL-driven routes
 # ---------------------------------------------------------------------------
+
+
+@app.get("/")
+def index() -> Response:
+    """Serve the Vite-built orbit visualizer frontend."""
+    index_html = _DIST_DIR / "index.html"
+    if not index_html.is_file():
+        return HTMLResponse(
+            "<h2>Frontend not built. Run <code>npm run build</code> first.</h2>",
+            status_code=503,
+        )
+    return FileResponse(index_html)
+
+
+@app.get("/viz-data")
+def get_viz_data() -> dict:
+    """Return VizData payload for the 3-D orbit visualizer frontend."""
+    if _viz_data is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No DITL data loaded. Call launch(ditl) first.",
+        )
+    return _viz_data
 
 
 @app.get("/health")
@@ -128,3 +164,10 @@ def get_plan(filename: str) -> dict:
         raise HTTPException(status_code=422, detail=f"Failed to parse plan: {exc}") from exc
 
     return schema.model_dump(mode="json")
+
+
+# Serve Vite build assets (hashed filenames under dist/assets/).  This mount
+# acts as a catch-all for requests not matched by any API route above.
+app.mount("/model", StaticFiles(directory=_MODEL_DIR, check_dir=False), name="model")
+app.mount("/textures", StaticFiles(directory=_TEXTURES_DIR, check_dir=False), name="textures")
+app.mount("/", StaticFiles(directory=_DIST_DIR, check_dir=False), name="static")

@@ -1,0 +1,104 @@
+import * as THREE from "three";
+import type { EciVec, EphemData } from "./types";
+
+interface EphemSample {
+  frac: number;
+  posKm: THREE.Vector3;
+  posW: THREE.Vector3;
+  sunVec: THREE.Vector3;
+  ramVec: THREE.Vector3;
+  lat: number;
+  lon: number;
+  beta: number;
+  inEcl: number;
+  alt: number;
+}
+
+/**
+ * Linearly interpolate a vector-valued sampled array.
+ *
+ * @param {number[][]} arr Array of `[x, y, z]` samples.
+ * @param {number} t Fractional sample index.
+ * @returns {THREE.Vector3}
+ */
+export function lerpVec(arr: EciVec[], t: number): THREE.Vector3 {
+  const i0 = Math.min(Math.floor(t), arr.length - 2);
+  const f = t - i0;
+  const a = arr[i0];
+  const b = arr[i0 + 1];
+  return new THREE.Vector3(
+    a[0] + f * (b[0] - a[0]),
+    a[1] + f * (b[1] - a[1]),
+    a[2] + f * (b[2] - a[2]),
+  );
+}
+
+/**
+ * Linearly interpolate a scalar sampled array.
+ *
+ * @param {number[]} arr Scalar samples.
+ * @param {number} t Fractional sample index.
+ * @returns {number}
+ */
+export function lerpScalar(arr: number[], t: number): number {
+  const i0 = Math.min(Math.floor(t), arr.length - 2);
+  const f = t - i0;
+  return arr[i0] + f * (arr[i0 + 1] - arr[i0]);
+}
+
+/**
+ * Convert simulation time to fractional ephemeris index.
+ *
+ * @param {number} t Unix timestamp (seconds).
+ * @param {number[]} ut Ephemeris sample times.
+ * @returns {number}
+ */
+export function ephemFrac(t: number, ut: number[]): number {
+  return Math.max(0, Math.min((t - ut[0]) / (ut[1] - ut[0]), ut.length - 1));
+}
+
+/**
+ * Sample interpolated ephemeris frame values at the current simulation time.
+ *
+ * @param {Object} deps
+ * @param {Object} deps.ephem Ephemeris payload.
+ * @param {number} deps.simTime Unix timestamp (seconds).
+ * @param {number} deps.reKm Earth radius in km.
+ * @param {number} deps.scale ECI km -> world scale factor.
+ * @returns {Object}
+ */
+export function sampleEphemFrame({
+  ephem,
+  simTime,
+  reKm,
+  scale,
+}: {
+  ephem: EphemData;
+  simTime: number;
+  reKm: number;
+  scale: number;
+}): EphemSample {
+  const frac = ephemFrac(simTime, ephem.utime);
+  const posKm = lerpVec(ephem.posvec, frac);
+  const sunVec = lerpVec(ephem.sunvec, frac).normalize();
+  const ramVec = lerpVec(ephem.ramvec, frac).normalize();
+  const lat = lerpScalar(ephem.lat, frac);
+  const lon = lerpScalar(ephem.lon, frac);
+  const beta = lerpScalar(ephem.beta, frac);
+  const inEcl = Math.round(lerpScalar(ephem.ineclipse, frac));
+  const alt = posKm.length() - reKm;
+  const posW = posKm.clone().multiplyScalar(scale);
+
+  return {
+    frac,
+    posKm,
+    posW,
+    sunVec,
+    ramVec,
+    lat,
+    lon,
+    beta,
+    inEcl,
+    alt,
+  };
+}

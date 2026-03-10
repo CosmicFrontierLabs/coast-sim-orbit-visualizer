@@ -49,10 +49,13 @@ def launch(
     import uvicorn
 
     from . import main as _app_module
-    from .serializer import ditl_to_payload
+    from .serializer import ditl_to_payload, ditl_to_viz_payload
 
     payload = ditl_to_payload(ditl)
     _app_module.set_data(payload)
+
+    viz_payload = ditl_to_viz_payload(ditl)
+    _app_module.set_viz_data(viz_payload)
 
     config = uvicorn.Config(
         _app_module.app,
@@ -64,7 +67,7 @@ def launch(
 
     if open_browser:
         threading.Timer(
-            1.5, lambda: webbrowser.open(f"http://localhost:{port}/docs")
+            1.5, lambda: webbrowser.open(f"http://localhost:{port}")
         ).start()
 
     if blocking:

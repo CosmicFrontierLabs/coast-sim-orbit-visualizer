@@ -1,36 +1,31 @@
 {
-  "name": "coast-sim",
+  "name": "coast-sim-orbit-visualizer",
   "version": "1.0.0",
-  "description": "A simulation project for visualizing spacecraft in orbit.",
-  "main": "src/app.ts",
+  "description": "3-D orbit visualizer for COASTSim DITL simulations.",
+  "type": "module",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/app.js",
-    "test": "jest",
+    "build": "vite build",
+    "dev": "vite",
+    "preview": "vite preview",
+    "typecheck": "tsc",
     "start:plan": "tsx src/cli.ts"
   },
   "dependencies": {
-    "typescript": "^4.5.0",
-    "three": "^0.132.2",
-    "rxjs": "^7.4.0"
+    "luxon": "^3.7.2",
+    "three": "^0.183.2"
   },
   "devDependencies": {
-    "jest": "^27.0.6",
-    "ts-jest": "^27.0.6",
-    "@types/jest": "^27.0.2",
-    "@types/node": "^16.11.7",
+    "@types/luxon": "^3.7.1",
+    "@types/three": "^0.183.1",
+    "typescript": "^5.9.2",
+    "vite": "^5.4.11",
     "tsx": "^4.19.2"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/CosmicFrontierLabs/coast-sim.git"
   },
-  "keywords": [
-    "spacecraft",
-    "simulation",
-    "visualization",
-    "typescript"
-  ],
+  "keywords": ["spacecraft", "simulation", "visualization", "typescript"],
   "author": "Cosmic Frontier Labs",
   "license": "Apache-2.0",
   "bugs": {
@@ -38,3 +33,4 @@
   },
   "homepage": "https://github.com/CosmicFrontierLabs/coast-sim#readme"
 }
+
