@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools_scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orbit-visualizer"
+version = "0.1.0"
+description = "Interactive orbit visualizer for COASTSim DITL simulations"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "coast-sim>=0.1",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["orbit_visualizer*"]
