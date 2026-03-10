@@ -19,6 +19,10 @@ export interface EphemData {
   lat: number[];
   lon: number[];
   beta: number[];
+  // Actual spacecraft attitude from DITL telemetry (optional for back-compat).
+  ra?: number[];
+  dec?: number[];
+  roll?: number[];
 }
 
 export interface PPSTEntry {

@@ -158,6 +158,16 @@ def ditl_to_viz_payload(ditl: "DITL") -> dict:
         "ineclipse": ineclipse,
     }
 
+    # Attempt to add actual spacecraft attitude from DITL telemetry.
+    # Falls back gracefully if housekeeping records are absent or malformed.
+    try:
+        ra_arr, dec_arr, roll_arr = _extract_attitude_arrays(ditl, timestamps)
+        ephem["ra"] = ra_arr
+        ephem["dec"] = dec_arr
+        ephem["roll"] = roll_arr
+    except Exception:
+        pass  # Frontend falls back to ram-aligned attitude.
+
     ppst = _serialize_ppst_for_viz(ditl)
     return {
         "meta": {
@@ -170,6 +180,55 @@ def ditl_to_viz_payload(ditl: "DITL") -> dict:
         "ppst": ppst,
         "slews": [],
     }
+
+
+def _extract_attitude_arrays(
+    ditl: "DITL", target_times: list[float]
+) -> tuple[list[float], list[float], list[float]]:
+    """Interpolate RA/Dec/Roll from DITL telemetry housekeeping onto *target_times*.
+
+    Uses ``numpy.unwrap`` to handle angle wrap-around before linear interpolation,
+    then normalises into the conventional ranges:
+    * RA  → [0, 360)
+    * Dec → unclamped (linear in degrees)
+    * Roll → (−180, 180]
+    """
+    import numpy as np
+
+    hk_list = ditl.telemetry.housekeeping
+    if not hk_list:
+        raise ValueError("No housekeeping records in DITL telemetry")
+
+    # Extract source timestamps – try multiple plausible field names.
+    hk_times: list[float] = []
+    for hk in hk_list:
+        for attr in ("timestamp", "time", "utime", "t"):
+            raw = getattr(hk, attr, None)
+            if raw is not None:
+                t = _to_unix(raw)
+                if t is not None:
+                    hk_times.append(t)
+                    break
+        else:
+            raise ValueError(f"Cannot find a timestamp field on housekeeping record: {hk!r}")
+
+    hk_t = np.asarray(hk_times, dtype=float)
+    ra_raw = np.asarray([float(hk.ra) for hk in hk_list], dtype=float)
+    dec_raw = np.asarray([float(hk.dec) for hk in hk_list], dtype=float)
+    roll_raw = np.asarray([float(hk.roll) for hk in hk_list], dtype=float)
+
+    t_out = np.asarray(target_times, dtype=float)
+
+    # Unwrap in radians before interpolating to avoid shortest-path flips.
+    ra_interp = np.interp(t_out, hk_t, np.unwrap(np.radians(ra_raw)))
+    dec_interp = np.interp(t_out, hk_t, np.unwrap(np.radians(dec_raw)))
+    roll_interp = np.interp(t_out, hk_t, np.unwrap(np.radians(roll_raw)))
+
+    ra_deg = np.degrees(ra_interp) % 360.0
+    dec_deg = np.degrees(dec_interp)
+    roll_deg = (np.degrees(roll_interp) % 360.0) - 180.0
+
+    return ra_deg.tolist(), dec_deg.tolist(), roll_deg.tolist()
 
 
 def _serialize_ppst_for_viz(ditl: "DITL") -> list[dict]:

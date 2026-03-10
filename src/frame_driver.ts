@@ -12,7 +12,7 @@ import { stepSimTime } from "./simulation_step";
 import { applySpacecraftState } from "./spacecraft_state";
 import { applyCameraMode } from "./camera_mode_driver";
 import { resetCameraToSc } from "./camera_utils";
-import type { Attitude, BasisRTB, CameraViewMode, FrameState, PPSTEntry, SlewWindow, VizData } from "./types";
+import type { BasisRTB, CameraViewMode, FrameState, PPSTEntry, SlewWindow, VizData } from "./types";
 
 interface RunVizFrameDeps {
   ts: number;
@@ -65,11 +65,12 @@ interface RunVizFrameDeps {
   hud: {
     updateOrbitHud: (state: { alt: number; lat: number; lon: number; beta: number; inEcl: number }) => void;
     updateAttitudeHud: (state: {
-      slew: SlewWindow | null;
-      slewAtt: Attitude | null;
       ppt: PPSTEntry | null;
       panelSunAngleDeg: number;
       simTime: number;
+      ra: number;
+      dec: number;
+      roll: number;
     }) => void;
   };
   updateScrubber: () => void;
@@ -147,7 +148,7 @@ export function runVizFrame({
   simTime = stepped.simTime;
   prevTs = stepped.prevTs;
 
-  const { posW, sunVec, ramVec, lat, lon, beta, inEcl, alt } = sampleEphemFrame({
+  const { posW, sunVec, ramVec, lat, lon, beta, inEcl, alt, ra, dec, roll } = sampleEphemFrame({
     ephem: data.ephem,
     simTime,
     reKm,
@@ -177,9 +178,13 @@ export function runVizFrame({
     showSun,
   });
 
-  const { ppt, slew, slewAtt, linkPosW, panelSunAngleDeg } = applySpacecraftState({
+  const { ppt, linkPosW, panelSunAngleDeg } = applySpacecraftState({
     simTime,
     data,
+    ra,
+    dec,
+    roll,
+    hasAttitude: !!(data.ephem.ra && data.ephem.ra.length > 0),
     posW,
     ramVec,
     sunVec,
@@ -249,11 +254,12 @@ export function runVizFrame({
   hud.updateOrbitHud({ alt, lat, lon, beta, inEcl });
   updateScrubber();
   hud.updateAttitudeHud({
-    slew,
-    slewAtt,
     ppt,
     panelSunAngleDeg,
     simTime,
+    ra,
+    dec,
+    roll,
   });
 
   scMarker.update(posW, cameraViewMode);

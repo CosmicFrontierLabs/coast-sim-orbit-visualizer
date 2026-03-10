@@ -1,12 +1,18 @@
 import * as THREE from "three";
 import { buildAttitudeQ } from "./attitude_math";
-import { activePPST, activeSlew, interpSlewAtt } from "./timeline_utils";
+import { activePPST } from "./timeline_utils";
 import { panelDriveModelQ } from "./panel_drive";
-import type { Attitude, PPSTEntry, SlewWindow, VizData } from "./types";
+import type { PPSTEntry, SlewWindow, VizData } from "./types";
 
 interface SpacecraftStateDeps {
   simTime: number;
   data: VizData & { slews: SlewWindow[] };
+  /** Actual spacecraft RA/Dec/Roll at simTime, interpolated from DITL telemetry. */
+  ra: number;
+  dec: number;
+  roll: number;
+  /** Whether ephem attitude data is available (falls back to ram-aligned if false). */
+  hasAttitude: boolean;
   posW: THREE.Vector3;
   ramVec: THREE.Vector3;
   sunVec: THREE.Vector3;
@@ -35,8 +41,6 @@ interface SpacecraftStateDeps {
  * @param {Object} deps
  * @returns {{
  *   ppt:any,
- *   slew:any,
- *   slewAtt:any,
  *   bodyQ:THREE.Quaternion,
  *   linkPosW:THREE.Vector3,
  *   panelSunAngleDeg:number
@@ -45,6 +49,10 @@ interface SpacecraftStateDeps {
 export function applySpacecraftState({
   simTime,
   data,
+  ra,
+  dec,
+  roll,
+  hasAttitude,
   posW,
   ramVec,
   sunVec,
@@ -67,26 +75,18 @@ export function applySpacecraftState({
   DEG,
 }: SpacecraftStateDeps): {
   ppt: PPSTEntry | null;
-  slew: SlewWindow | null;
-  slewAtt: Attitude | null;
   bodyQ: THREE.Quaternion;
   linkPosW: THREE.Vector3;
   panelSunAngleDeg: number;
 } {
+  // PPT is kept for HUD target-name display only; pointing comes from DITL attitude.
   const ppt = activePPST(simTime, data.ppst);
-  const slew = activeSlew(simTime, data.slews || []);
-  let slewAtt: Attitude | null = null;
-  let bodyQ;
 
-  if (slew) {
-    slewAtt = interpSlewAtt(slew, simTime);
-    if (slewAtt) {
-      bodyQ = buildAttitudeQ(slewAtt.ra, slewAtt.dec, slewAtt.roll);
-    } else {
-      bodyQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), ramVec);
-    }
-  } else if (ppt) {
-    bodyQ = buildAttitudeQ(ppt.ra, ppt.dec, ppt.roll);
+  // Build body quaternion from DITL telemetry attitude when available,
+  // otherwise fall back to ram-aligned (nose along velocity vector).
+  let bodyQ: THREE.Quaternion;
+  if (hasAttitude) {
+    bodyQ = buildAttitudeQ(ra, dec, roll);
   } else {
     bodyQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), ramVec);
   }
@@ -140,8 +140,6 @@ export function applySpacecraftState({
 
   return {
     ppt,
-    slew,
-    slewAtt,
     bodyQ,
     linkPosW,
     panelSunAngleDeg,

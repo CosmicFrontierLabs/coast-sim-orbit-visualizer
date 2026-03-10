@@ -12,6 +12,9 @@ interface EphemSample {
   beta: number;
   inEcl: number;
   alt: number;
+  ra: number;
+  dec: number;
+  roll: number;
 }
 
 /**
@@ -89,6 +92,12 @@ export function sampleEphemFrame({
   const alt = posKm.length() - reKm;
   const posW = posKm.clone().multiplyScalar(scale);
 
+  // Attitude from DITL telemetry if present; otherwise zero (caller falls back
+  // to ram-aligned).
+  const ra = ephem.ra ? lerpScalar(ephem.ra, frac) : 0;
+  const dec = ephem.dec ? lerpScalar(ephem.dec, frac) : 0;
+  const roll = ephem.roll ? lerpScalar(ephem.roll, frac) : 0;
+
   return {
     frac,
     posKm,
@@ -100,5 +109,8 @@ export function sampleEphemFrame({
     beta,
     inEcl,
     alt,
+    ra,
+    dec,
+    roll,
   };
 }

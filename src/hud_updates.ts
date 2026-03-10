@@ -1,4 +1,4 @@
-import type { Attitude, PPSTEntry, SlewWindow } from "./types";
+import type { PPSTEntry } from "./types";
 
 interface OrbitHudState {
   alt: number;
@@ -9,11 +9,13 @@ interface OrbitHudState {
 }
 
 interface AttitudeHudState {
-  slew: SlewWindow | null;
-  slewAtt: Attitude | null;
   ppt: PPSTEntry | null;
   panelSunAngleDeg: number;
   simTime: number;
+  /** Actual spacecraft attitude from DITL telemetry (interpolated onto sim time). */
+  ra: number;
+  dec: number;
+  roll: number;
 }
 
 interface HudController {
@@ -35,7 +37,7 @@ function mustEl<T extends HTMLElement>(id: string): T {
  * @returns {{
  *   setInitMode: (nSlews:number) => void,
  *   updateOrbitHud: (state: {alt:number,lat:number,lon:number,beta:number,inEcl:number}) => void,
- *   updateAttitudeHud: (state: {slew:any,slewAtt:any,ppt:any,panelSunAngleDeg:number,simTime:number}) => void,
+ *   updateAttitudeHud: (state: {ppt:any,panelSunAngleDeg:number,simTime:number,ra:number,dec:number,roll:number}) => void,
  * }}
  */
 export function createHudController(): HudController {
@@ -67,30 +69,21 @@ export function createHudController(): HudController {
   }
 
   function updateAttitudeHud({
-    slew,
-    slewAtt,
     ppt,
     panelSunAngleDeg,
     simTime,
+    ra,
+    dec,
+    roll,
   }: AttitudeHudState): void {
-    if (slew && slewAtt) {
-      els.mode.textContent = "SLEW";
-      els.ra.textContent = slewAtt.ra.toFixed(4);
-      els.dec.textContent = slewAtt.dec.toFixed(4);
-      els.roll.textContent = slewAtt.roll.toFixed(2);
-      els.panelSun.textContent = panelSunAngleDeg.toFixed(2);
-      els.tgt.textContent = slew.to ?? "(slew)";
-      const prog = (((simTime - slew.begin) / (slew.end - slew.begin)) * 100).toFixed(0);
-      els.scrubLabel.textContent = `${slew.to}  ${prog}%`;
-      return;
-    }
+    // Always display the actual attitude from DITL telemetry.
+    els.ra.textContent = ra.toFixed(4);
+    els.dec.textContent = dec.toFixed(4);
+    els.roll.textContent = roll.toFixed(2);
+    els.panelSun.textContent = panelSunAngleDeg.toFixed(2);
 
     if (ppt) {
       els.mode.textContent = "PPT";
-      els.ra.textContent = ppt.ra.toFixed(4);
-      els.dec.textContent = ppt.dec.toFixed(4);
-      els.roll.textContent = ppt.roll.toFixed(2);
-      els.panelSun.textContent = panelSunAngleDeg.toFixed(2);
       els.tgt.textContent = ppt.name;
       const prog = (((simTime - ppt.begin) / (ppt.end - ppt.begin)) * 100).toFixed(0);
       els.scrubLabel.textContent = `${ppt.name}  ${prog}%`;
@@ -98,10 +91,7 @@ export function createHudController(): HudController {
     }
 
     els.mode.textContent = "GAP";
-    [els.ra, els.dec, els.roll, els.panelSun].forEach((el) => {
-      el.textContent = "—";
-    });
-    els.tgt.textContent = "(slew / gap)";
+    els.tgt.textContent = "—";
     els.scrubLabel.textContent = "(between observations)";
   }
 
