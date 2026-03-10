@@ -2,7 +2,7 @@ import type * as THREE from "three";
 import type { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { sampleEphemFrame } from "./ephem_sampling";
 import {
-  followSwiftCamera,
+  followScCamera,
   updateCameraForView,
   updateEarthAndCloudOrientation,
   updateSunScene,
@@ -11,7 +11,7 @@ import { moonPositionECI } from "./scene_setup";
 import { stepSimTime } from "./simulation_step";
 import { applySpacecraftState } from "./spacecraft_state";
 import { applyCameraMode } from "./camera_mode_driver";
-import { resetCameraToSwift } from "./camera_utils";
+import { resetCameraToSc } from "./camera_utils";
 import type { Attitude, BasisRTB, CameraViewMode, FrameState, PPSTEntry, SlewWindow, VizData } from "./types";
 
 interface RunVizFrameDeps {
@@ -30,13 +30,13 @@ interface RunVizFrameDeps {
   sunDist: number;
   linkTrailWu: number;
   panelMeshTrimDeg: number;
-  swiftDiagWu: number;
-  swiftScreenFraction: number;
+  scDiagWu: number;
+  scScreenFraction: number;
   cameraViewMode: CameraViewMode;
   camera: THREE.PerspectiveCamera;
   orbitCtl: OrbitControls;
   updateCameraClipping: () => void;
-  swiftRadialBasis: (p: THREE.Vector3) => BasisRTB;
+  scRadialBasis: (p: THREE.Vector3) => BasisRTB;
   linkPovCamera: { apply: (state: { posW: THREE.Vector3; linkPosW: THREE.Vector3; ramVec: THREE.Vector3 }) => void };
   scGroup: THREE.Group;
   linkGroup: THREE.Group;
@@ -73,7 +73,7 @@ interface RunVizFrameDeps {
     }) => void;
   };
   updateScrubber: () => void;
-  swiftMarker: { update: (posW: THREE.Vector3, viewMode: CameraViewMode) => void };
+  scMarker: { update: (posW: THREE.Vector3, viewMode: CameraViewMode) => void };
 }
 
 /**
@@ -98,13 +98,13 @@ export function runVizFrame({
   sunDist,
   linkTrailWu,
   panelMeshTrimDeg,
-  swiftDiagWu,
-  swiftScreenFraction,
+  scDiagWu,
+  scScreenFraction,
   cameraViewMode,
   camera,
   orbitCtl,
   updateCameraClipping,
-  swiftRadialBasis,
+  scRadialBasis,
   linkPovCamera,
   scGroup,
   linkGroup,
@@ -132,7 +132,7 @@ export function runVizFrame({
   showScSun,
   hud,
   updateScrubber,
-  swiftMarker,
+  scMarker,
 }: RunVizFrameDeps): FrameState {
   const stepped = stepSimTime({
     simTime,
@@ -203,15 +203,15 @@ export function runVizFrame({
   });
 
   if (!camInitDone) {
-    resetCameraToSwift({
+    resetCameraToSc({
       camera,
       orbitCtl,
-      swiftPos: posW.clone(),
+      scPos: posW.clone(),
       linkPos: linkGroup.position.clone(),
-      swiftRadialBasis,
+      scRadialBasis,
       DEG: deg,
-      SWIFT_DIAG_WU: swiftDiagWu,
-      SWIFT_SCREEN_FRACTION: swiftScreenFraction,
+      SC_DIAG_WU: scDiagWu,
+      SC_SCREEN_FRACTION: scScreenFraction,
       LINK_TRAIL_WU: linkTrailWu,
       updateCameraClipping,
     });
@@ -226,9 +226,9 @@ export function runVizFrame({
       posW,
       linkPos: linkPosW,
       ramVec,
-      swiftRadialBasis,
+      scRadialBasis,
       updateCameraClipping,
-      swiftDiagWu,
+      scDiagWu,
     });
     cameraViewNeedsSnap = false;
   }
@@ -240,9 +240,9 @@ export function runVizFrame({
     linkPosW,
     ramVec,
     linkPovCamera,
-    followSwiftCamera,
+    followScCamera,
     camera,
-    swiftRadialBasis,
+    scRadialBasis,
     updateCameraClipping,
   });
 
@@ -256,7 +256,7 @@ export function runVizFrame({
     simTime,
   });
 
-  swiftMarker.update(posW, cameraViewMode);
+  scMarker.update(posW, cameraViewMode);
 
   if (orbitCtl.enabled) {
     orbitCtl.update();

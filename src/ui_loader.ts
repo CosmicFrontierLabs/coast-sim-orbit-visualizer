@@ -91,7 +91,7 @@ export function createLoaderController({
 
     loaderMsg.innerHTML = `
       <div class="up-card">
-        <div class="up-title">SWIFT ORBIT VISUALIZER</div>
+        <div class="up-title">ORBIT VISUALIZER</div>
         <div class="up-tabs">
           <button class="up-tab active" id="tab-file">📂 Local file</button>
           <button class="up-tab" id="tab-date">📅 By date</button>

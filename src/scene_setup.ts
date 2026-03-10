@@ -20,7 +20,7 @@ import {
   SC_HEAD_W,
   SC_SUN_VEC_SHAFT_LEN,
   SC_VEL_SHAFT_LEN,
-  SWIFT_DIAG_WU,
+  SC_DIAG_WU,
 } from "./constants";
 
 /**
@@ -95,7 +95,7 @@ export function createSceneGraph({ assetBase }: { assetBase: string }) {
   const camera = new THREE.PerspectiveCamera(
     45,
     innerWidth / innerHeight,
-    Math.max(1e-8, SWIFT_DIAG_WU / 20),
+    Math.max(1e-8, SC_DIAG_WU / 20),
     400,
   );
   camera.position.set(0, 0, 4);
@@ -104,12 +104,12 @@ export function createSceneGraph({ assetBase }: { assetBase: string }) {
   const orbitCtl = new OrbitControls(camera, renderer.domElement);
   orbitCtl.enableDamping = true;
   orbitCtl.dampingFactor = 0.07;
-  orbitCtl.minDistance = Math.max(1e-9, SWIFT_DIAG_WU / 20);
+  orbitCtl.minDistance = Math.max(1e-9, SC_DIAG_WU / 20);
   orbitCtl.maxDistance = 50;
 
   function updateCameraClipping() {
     const d = camera.position.distanceTo(orbitCtl.target);
-    const near = Math.max(SWIFT_DIAG_WU * 0.05, d * CAMERA_NEAR_FRAC, 1e-8);
+    const near = Math.max(SC_DIAG_WU * 0.05, d * CAMERA_NEAR_FRAC, 1e-8);
     const far = Math.max(CAMERA_MIN_FAR, d + CAMERA_FAR_PAD);
     if (Math.abs(camera.near - near) > 1e-10 || Math.abs(camera.far - far) > 1e-6) {
       camera.near = near;

@@ -1,52 +1,78 @@
-# Orbit Visualizer
+# orbit-visualizer
 
-Visualize spacecraft orbits and telemetry from a [COASTSim](../README.md) DITL simulation.
+Interactive 3-D orbit visualizer for [COASTSim](../README.md) DITL simulations. Pass a completed `DITL` object to `launch()` and a full Three.js visualization opens in your browser — live animation, scrubber timeline, HUD, and camera controls.
 
 ## Installation
 
 ```bash
-# Python dependencies (from the repo root)
-pip install -e ".[dev]"
-pip install -r orbit-visualizer/backend/requirements.txt
+# Python package (from the repo root — included in the main coast-sim install)
+pip install -e .
 
 # TypeScript frontend
 cd orbit-visualizer
-npm install && npm run build
+npm install
+npm run build
 ```
+
+> **Note:** `astropy` and `numpy` must be available in your Python environment for the serializer to compute sun vectors, eclipse flags, and beta angles.
 
 ## Usage
 
-After running a DITL simulation, pass the completed object to `launch()`:
-
 ```python
-from orbit_visualizer.backend import launch
+from orbit_visualizer import launch
 
 ditl.calc()
-launch(ditl)
+launch(ditl)          # starts server + opens http://localhost:8000
 ```
-
-This starts a local server and opens the visualization in your browser at **http://localhost:8000**.
 
 ### Options
 
 ```python
-launch(ditl, port=8001)             # use a different port
+launch(ditl, port=8001)             # custom port
 launch(ditl, open_browser=False)    # don't open browser automatically
-launch(ditl, blocking=True)         # block until the server exits (for scripts)
+launch(ditl, blocking=True)         # block until server exits (useful in scripts)
 ```
 
-The `orbit_visualizer` package is included in the main `coast-sim` install — no separate install step needed after `pip install -e .` from the repo root.
+## What you see
+
+| Panel | Contents |
+|---|---|
+| **ORBIT** | Altitude, latitude, longitude, beta angle, eclipse state |
+| **ATTITUDE** | RA, Dec, Roll, solar panel angle to Sun |
+| **TARGET** | Pointing mode and current target name |
+| **Controls** | Playback speed, axis/grid overlays, camera view selector |
+
+The scrubber timeline at the bottom shows PPST observation windows. Drag the slider or let it play in real time. Camera tracks the spacecraft by default; switch to Earth-fixed, horizon, or link POV views from the dropdown.
+
+Drag a `viz_data.json` file onto the canvas to load data without a running Python backend.
+
+## Project layout
+
+```
+app/                  # Vite entry point (index.html, orbit_viz.ts, CSS)
+src/                  # TypeScript modules (Three.js scene, HUD, controls, …)
+orbit_visualizer/     # Python package (FastAPI server + serializer)
+model/                # Spacecraft GLTF model
+textures/             # Earth day/night/cloud textures
 ```
 
-## What you can see
+## Development
 
-The visualizer shows:
+```bash
+# Run the Python backend (terminal 1)
+uvicorn orbit_visualizer.main:app --reload --port 8000
 
-- **Orbit trajectory** — the spacecraft's 3-D path in ECI coordinates
-- **Pointing direction** — where the spacecraft is pointed at each timestep (RA/Dec/Roll)
-- **ACS mode** — Science, Slewing, Safe, SAA, Ground Pass, etc.
-- **Power & battery** — solar panel illumination, power draw, battery state of charge
-- **Data management** — onboard recorder fill fraction
-- **Eclipse** — when the spacecraft is in Earth's shadow
+# Run the Vite dev server with HMR (terminal 2)
+npm run dev           # opens http://localhost:5173, proxies /viz-data → :8000
+```
 
-This project is licensed under the MIT License. See the LICENSE file for details.
+Type-check without building:
+
+```bash
+npm run typecheck
+```
+
+## License
+
+Apache-2.0 — see [LICENSE](LICENSE).
+

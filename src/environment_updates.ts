@@ -90,25 +90,25 @@ export function updateSunScene({
 }
 
 /**
- * Keep camera offset relative to Swift's local radial frame as Swift moves.
+ * Keep camera offset relative to spacecraft's local radial frame as spacecraft moves.
  *
  * @param {Object} deps
  * @returns {void}
  */
-export function followSwiftCamera({
+export function followScCamera({
   camera,
   orbitCtl,
   posW,
-  swiftRadialBasis,
+  scRadialBasis,
   updateCameraClipping,
 }: {
   camera: THREE.PerspectiveCamera;
   orbitCtl: OrbitControls;
   posW: THREE.Vector3;
-  swiftRadialBasis: (p: THREE.Vector3) => BasisRTB;
+  scRadialBasis: (p: THREE.Vector3) => BasisRTB;
   updateCameraClipping: () => void;
 }): void {
-  const oldBasis = swiftRadialBasis(orbitCtl.target);
+  const oldBasis = scRadialBasis(orbitCtl.target);
   const worldOff = camera.position.clone().sub(orbitCtl.target);
   const lx = worldOff.dot(oldBasis.r);
   const ly = worldOff.dot(oldBasis.t);
@@ -116,7 +116,7 @@ export function followSwiftCamera({
 
   orbitCtl.target.copy(posW);
 
-  const nextBasis = swiftRadialBasis(posW);
+  const nextBasis = scRadialBasis(posW);
   camera.position.set(
     posW.x + lx * nextBasis.r.x + ly * nextBasis.t.x + lz * nextBasis.b.x,
     posW.y + lx * nextBasis.r.y + ly * nextBasis.t.y + lz * nextBasis.b.y,
@@ -139,9 +139,9 @@ export function updateCameraForView({
   posW,
   linkPos,
   ramVec,
-  swiftRadialBasis,
+  scRadialBasis,
   updateCameraClipping,
-  swiftDiagWu,
+  scDiagWu,
 }: {
   viewMode: CameraViewMode;
   camera: THREE.PerspectiveCamera;
@@ -149,11 +149,11 @@ export function updateCameraForView({
   posW: THREE.Vector3;
   linkPos?: THREE.Vector3;
   ramVec: THREE.Vector3;
-  swiftRadialBasis: (p: THREE.Vector3) => BasisRTB;
+  scRadialBasis: (p: THREE.Vector3) => BasisRTB;
   updateCameraClipping: () => void;
-  swiftDiagWu: number;
+  scDiagWu: number;
 }): void {
-  const basis = swiftRadialBasis(posW);
+  const basis = scRadialBasis(posW);
   const vHat = ramVec && ramVec.lengthSq() > 1e-12 ? ramVec.clone().normalize() : basis.t.clone();
 
   if (viewMode === "link-pov") {
@@ -181,9 +181,9 @@ export function updateCameraForView({
   if (viewMode === "follow-above") {
     camera.position
       .copy(posW)
-      .addScaledVector(basis.r, swiftDiagWu * 12)
-      .addScaledVector(vHat, -swiftDiagWu * 2.2)
-      .addScaledVector(basis.b, swiftDiagWu * 2.2);
+      .addScaledVector(basis.r, scDiagWu * 12)
+      .addScaledVector(vHat, -scDiagWu * 2.2)
+      .addScaledVector(basis.b, scDiagWu * 2.2);
     camera.up.copy(basis.b);
     updateCameraClipping();
     return;
@@ -193,9 +193,9 @@ export function updateCameraForView({
     // Offset to the sunlit shoulder and aft side to keep Earth limb in-frame.
     camera.position
       .copy(posW)
-      .addScaledVector(vHat, -swiftDiagWu * 14)
-      .addScaledVector(basis.r, swiftDiagWu * 7)
-      .addScaledVector(basis.b, swiftDiagWu * 4);
+      .addScaledVector(vHat, -scDiagWu * 14)
+      .addScaledVector(basis.r, scDiagWu * 7)
+      .addScaledVector(basis.b, scDiagWu * 4);
     camera.up.copy(basis.r);
     updateCameraClipping();
     return;
@@ -204,15 +204,15 @@ export function updateCameraForView({
   // Default: trailing chase camera from behind along -V.
   camera.position
     .copy(posW)
-    .addScaledVector(vHat, -swiftDiagWu * 12)
-    .addScaledVector(basis.r, swiftDiagWu * 3.2)
-    .addScaledVector(basis.b, swiftDiagWu * 1.8);
+    .addScaledVector(vHat, -scDiagWu * 12)
+    .addScaledVector(basis.r, scDiagWu * 3.2)
+    .addScaledVector(basis.b, scDiagWu * 1.8);
   camera.up.copy(basis.b);
   updateCameraClipping();
 }
 
 /**
- * Keep camera at Link and look toward Swift each frame.
+ * Keep camera at Link and look toward spacecraft each frame.
  *
  * @param {Object} deps
  * @returns {void}
@@ -222,20 +222,20 @@ export function followLinkPovCamera({
   orbitCtl,
   posW,
   linkPos,
-  swiftRadialBasis,
+  scRadialBasis,
   updateCameraClipping,
 }: {
   camera: THREE.PerspectiveCamera;
   orbitCtl: OrbitControls;
   posW: THREE.Vector3;
   linkPos?: THREE.Vector3;
-  swiftRadialBasis: (p: THREE.Vector3) => BasisRTB;
+  scRadialBasis: (p: THREE.Vector3) => BasisRTB;
   updateCameraClipping: () => void;
 }): void {
   if (!linkPos) {
     return;
   }
-  const basis = swiftRadialBasis(posW);
+  const basis = scRadialBasis(posW);
   orbitCtl.target.copy(posW);
   camera.position.copy(linkPos);
   camera.up.copy(basis.b);

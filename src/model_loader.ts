@@ -4,17 +4,17 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
 
 /**
- * Load the Swift GLB model, apply normalization/calibration, and publish panel state.
+ * Load the spacecraft GLB model, apply normalization/calibration, and publish panel state.
  *
  * @param {Object} deps
  * @returns {void}
  */
-export function loadSwiftModel({
+export function loadScModel({
   assetBase,
   modelGroup,
   panelMeshGroup,
   fallback,
-  swiftDiagWu,
+  scDiagWu,
   setLoading,
   clearLoading,
   meshAreaAndNormalLocal,
@@ -25,7 +25,7 @@ export function loadSwiftModel({
   modelGroup: THREE.Group;
   panelMeshGroup: THREE.Group;
   fallback: THREE.Object3D;
-  swiftDiagWu: number;
+  scDiagWu: number;
   setLoading: (msg: string) => void;
   clearLoading: () => void;
   meshAreaAndNormalLocal: (mesh: THREE.Mesh) => { area: number; normal: THREE.Vector3 };
@@ -42,7 +42,7 @@ export function loadSwiftModel({
   gltfLoaderDraco.setDRACOLoader(dracoLoader);
   const gltfLoaderPlain = new GLTFLoader();
 
-  const candidateUrls = [assetBase + "model/Swift.glb", assetBase + "model/swift.glb"];
+  const candidateUrls = [assetBase + "model/spacecraft.glb", assetBase + "model/spacecraft.glb"];
   const attempts: Array<{ loader: GLTFLoader; url: string; label: string }> = [];
   candidateUrls.forEach((url) => {
     attempts.push({ loader: gltfLoaderDraco, url, label: "draco" });
@@ -81,7 +81,7 @@ export function loadSwiftModel({
     const box = new THREE.Box3().setFromObject(model);
     const sz = box.getSize(new THREE.Vector3()).length();
     if (sz > 0) {
-      const s = swiftDiagWu / sz;
+      const s = scDiagWu / sz;
       model.scale.setScalar(s);
       const ctr = box.getCenter(new THREE.Vector3());
       model.position.set(-ctr.x * s, -ctr.y * s, -ctr.z * s);
@@ -150,7 +150,7 @@ export function loadSwiftModel({
       (gltf: GLTF) => applyLoadedModel(gltf),
       (p: ProgressEvent<EventTarget>) => {
         const pct = p.total ? Math.round((100 * p.loaded) / p.total) : "…";
-        setLoading(`Loading Swift.glb (${label})… ${pct}%`);
+        setLoading(`Loading spacecraft model (${label})… ${pct}%`);
       },
       (err: unknown) => {
         console.warn(`GLB load attempt failed [${label}] ${url}`, err);

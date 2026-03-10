@@ -15,9 +15,9 @@ export function applyCameraMode({
   linkPosW,
   ramVec,
   linkPovCamera,
-  followSwiftCamera,
+  followScCamera,
   camera,
-  swiftRadialBasis,
+  scRadialBasis,
   updateCameraClipping,
 }: {
   cameraViewMode: CameraViewMode;
@@ -26,15 +26,15 @@ export function applyCameraMode({
   linkPosW: THREE.Vector3;
   ramVec: THREE.Vector3;
   linkPovCamera: { apply: (state: { posW: THREE.Vector3; linkPosW: THREE.Vector3; ramVec: THREE.Vector3 }) => void };
-  followSwiftCamera: (deps: {
+  followScCamera: (deps: {
     camera: THREE.PerspectiveCamera;
     orbitCtl: OrbitControls;
     posW: THREE.Vector3;
-    swiftRadialBasis: (p: THREE.Vector3) => BasisRTB;
+    scRadialBasis: (p: THREE.Vector3) => BasisRTB;
     updateCameraClipping: () => void;
   }) => void;
   camera: THREE.PerspectiveCamera;
-  swiftRadialBasis: (p: THREE.Vector3) => BasisRTB;
+  scRadialBasis: (p: THREE.Vector3) => BasisRTB;
   updateCameraClipping: () => void;
 }): void {
   if (cameraViewMode === "earth-fixed") {
@@ -51,11 +51,11 @@ export function applyCameraMode({
   }
 
   orbitCtl.enabled = true;
-  followSwiftCamera({
+  followScCamera({
     camera,
     orbitCtl,
     posW,
-    swiftRadialBasis,
+    scRadialBasis,
     updateCameraClipping,
   });
 }

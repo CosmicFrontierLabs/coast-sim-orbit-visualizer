@@ -1,11 +1,11 @@
 import * as THREE from "three";
 import type { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { swiftRadialBasis } from "../src/attitude_math";
+import { scRadialBasis } from "../src/attitude_math";
 import { fmtTime } from "../src/timeline_utils";
 import { createLoaderController } from "../src/ui_loader";
 import { wirePlaybackControls, wireScrubber } from "../src/scrubber_controls";
 import { wireDropHandlers } from "../src/drop_handlers";
-import { resetCameraToSwift } from "../src/camera_utils";
+import { resetCameraToSc } from "../src/camera_utils";
 import { createHudController } from "../src/hud_updates";
 import { estimatePanelFaceNormalModel, meshAreaAndNormalLocal } from "../src/panel_drive";
 import {
@@ -17,12 +17,12 @@ import {
   SCALE,
   SPEEDS,
   SUN_DIST,
-  SWIFT_DIAG_WU,
-  SWIFT_SCREEN_FRACTION,
+  SC_DIAG_WU,
+  SC_SCREEN_FRACTION,
 } from "../src/constants";
 import { createSceneGraph } from "../src/scene_setup";
-import { loadSwiftModel } from "../src/model_loader";
-import { createSwiftMarkerController } from "../src/swift_marker";
+import { loadScModel } from "../src/model_loader";
+import { createScMarkerController } from "../src/sc_marker";
 import { createLinkPovCameraController } from "../src/link_pov_camera";
 import { buildCleanSlews } from "../src/viz_data_prep";
 import { applyInitDataSideEffects } from "../src/viz_bootstrap";
@@ -90,15 +90,15 @@ const loader = createLoaderController({
 const { clearLoading, loadJSON, setLoading, showMessage } = loader;
 const hud = createHudController();
 
-// Load Swift.glb
+// Load spacecraft model
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-setLoading("Loading Swift.glb…");
-loadSwiftModel({
+setLoading("Loading spacecraft model…");
+loadScModel({
   assetBase: ASSET_BASE,
   modelGroup,
   panelMeshGroup,
   fallback,
-  swiftDiagWu: SWIFT_DIAG_WU,
+  scDiagWu: SC_DIAG_WU,
   setLoading,
   clearLoading,
   meshAreaAndNormalLocal,
@@ -134,17 +134,17 @@ if (cameraViewSel) {
   });
 }
 
-const swiftLabelEl = document.getElementById("swift-label");
-if (swiftLabelEl) {
+const scLabelEl = document.getElementById("sc-label");
+if (scLabelEl) {
   // Render label in Three.js; keep DOM placeholder hidden.
-  swiftLabelEl.style.display = "none";
+  scLabelEl.style.display = "none";
 }
-const swiftMarker = createSwiftMarkerController({ scene, camera, swiftDiagWu: SWIFT_DIAG_WU });
+const scMarker = createScMarkerController({ scene, camera, scDiagWu: SC_DIAG_WU });
 const linkPovCamera = createLinkPovCameraController({
   domElement: renderer.domElement,
   camera,
   orbitCtl,
-  swiftRadialBasis,
+  scRadialBasis,
   updateCameraClipping,
   linkTrailWu: LINK_TRAIL_WU,
   getCameraViewMode: () => cameraViewMode,
@@ -209,15 +209,15 @@ wirePlaybackControls({
 
 mustEl<HTMLButtonElement>("btn-reset-cam").addEventListener("click", () => {
   linkPovCamera.resetZoom();
-  resetCameraToSwift({
+  resetCameraToSc({
     camera,
     orbitCtl,
-    swiftPos: scGroup.position.clone(),
+    scPos: scGroup.position.clone(),
     linkPos: linkGroup.position.clone(),
-    swiftRadialBasis,
+    scRadialBasis,
     DEG,
-    SWIFT_DIAG_WU,
-    SWIFT_SCREEN_FRACTION,
+    SC_DIAG_WU,
+    SC_SCREEN_FRACTION,
     LINK_TRAIL_WU,
     updateCameraClipping,
   });
@@ -262,13 +262,13 @@ function animate(ts: number): void {
     sunDist: SUN_DIST,
     linkTrailWu: LINK_TRAIL_WU,
     panelMeshTrimDeg: PANEL_MESH_TRIM_DEG,
-    swiftDiagWu: SWIFT_DIAG_WU,
-    swiftScreenFraction: SWIFT_SCREEN_FRACTION,
+    scDiagWu: SC_DIAG_WU,
+    scScreenFraction: SC_SCREEN_FRACTION,
     cameraViewMode,
     camera,
     orbitCtl,
     updateCameraClipping,
-    swiftRadialBasis,
+    scRadialBasis,
     linkPovCamera,
     scGroup,
     linkGroup,
@@ -296,7 +296,7 @@ function animate(ts: number): void {
     showScSun: mustEl<HTMLInputElement>("show-sc-sun").checked,
     hud,
     updateScrubber,
-    swiftMarker,
+    scMarker,
   });
   simTime = frame.simTime;
   prevTs = frame.prevTs;

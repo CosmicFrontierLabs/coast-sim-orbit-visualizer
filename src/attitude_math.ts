@@ -17,12 +17,12 @@ export function radec2eci(ra: number, dec: number): THREE.Vector3 {
 }
 
 /**
- * Orthonormal basis for Swift's local radial frame.
+ * Orthonormal basis for spacecraft's local radial frame.
  * r = radially outward from Earth ("up" from surface)
  * t = east-ish tangent = (Z × r).normalize()
  * b = north-ish tangent = r × t
  */
-export function swiftRadialBasis(pos: THREE.Vector3): BasisRTB {
+export function scRadialBasis(pos: THREE.Vector3): BasisRTB {
   const r = pos.clone().normalize();
   let t = new THREE.Vector3(0, 0, 1).cross(r);
   if (t.lengthSq() < 1e-4) t.set(1, 0, 0).cross(r);

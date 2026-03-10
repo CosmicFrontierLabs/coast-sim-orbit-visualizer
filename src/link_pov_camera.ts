@@ -9,7 +9,7 @@ import type { BasisRTB, CameraViewMode } from "./types";
  * @param {HTMLElement} deps.domElement
  * @param {THREE.PerspectiveCamera} deps.camera
  * @param {import("three/addons/controls/OrbitControls.js").OrbitControls} deps.orbitCtl
- * @param {(posW:THREE.Vector3) => {r:THREE.Vector3,t:THREE.Vector3,b:THREE.Vector3}} deps.swiftRadialBasis
+ * @param {(posW:THREE.Vector3) => {r:THREE.Vector3,t:THREE.Vector3,b:THREE.Vector3}} deps.scRadialBasis
  * @param {() => void} deps.updateCameraClipping
  * @param {number} deps.linkTrailWu
  * @param {() => string} deps.getCameraViewMode
@@ -22,7 +22,7 @@ export function createLinkPovCameraController({
   domElement,
   camera,
   orbitCtl,
-  swiftRadialBasis,
+  scRadialBasis,
   updateCameraClipping,
   linkTrailWu,
   getCameraViewMode,
@@ -30,7 +30,7 @@ export function createLinkPovCameraController({
   domElement: HTMLElement;
   camera: THREE.PerspectiveCamera;
   orbitCtl: OrbitControls;
-  swiftRadialBasis: (p: THREE.Vector3) => BasisRTB;
+  scRadialBasis: (p: THREE.Vector3) => BasisRTB;
   updateCameraClipping: () => void;
   linkTrailWu: number;
   getCameraViewMode: () => CameraViewMode;
@@ -66,10 +66,10 @@ export function createLinkPovCameraController({
   );
 
   function apply({ posW, linkPosW, ramVec }: { posW: THREE.Vector3; linkPosW?: THREE.Vector3; ramVec: THREE.Vector3 }): void {
-    const basis = swiftRadialBasis(posW);
+    const basis = scRadialBasis(posW);
     const linkAnchor = linkPosW || posW.clone().addScaledVector(ramVec, -linkTrailWu);
-    const linkToSwift = posW.clone().sub(linkAnchor);
-    const linkDist = linkToSwift.length();
+    const linkToSc = posW.clone().sub(linkAnchor);
+    const linkDist = linkToSc.length();
 
     if (linkDist > 1e-18) {
       lastLinkDistWu = linkDist;
@@ -79,7 +79,7 @@ export function createLinkPovCameraController({
     const dollyWu = THREE.MathUtils.clamp(zoomOffsetWu, MIN_OFFSET_WU, maxOffsetWu);
     const linkPovPos =
       linkDist > 1e-18
-        ? linkAnchor.clone().addScaledVector(linkToSwift.multiplyScalar(1 / linkDist), dollyWu)
+        ? linkAnchor.clone().addScaledVector(linkToSc.multiplyScalar(1 / linkDist), dollyWu)
         : linkAnchor.clone();
 
     orbitCtl.target.copy(posW);
