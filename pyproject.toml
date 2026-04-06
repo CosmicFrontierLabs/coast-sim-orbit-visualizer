@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "orbit-visualizer"
 dynamic = ["version"]
 description = "Interactive orbit visualizer for COASTSim DITL simulations"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.115",

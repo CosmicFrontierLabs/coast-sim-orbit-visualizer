@@ -29,7 +29,18 @@ def _build_frontend() -> None:
         )
 
     print("Building orbit_visualizer frontend bundle via npm run build")
-    subprocess.run([npm, "run", "build"], cwd=repo_root, check=True)
+    try:
+        subprocess.run([npm, "run", "build"], cwd=repo_root, check=True)
+    except subprocess.CalledProcessError as exc:
+        if dist_index.is_file():
+            print(
+                "Frontend build failed; using existing orbit_visualizer/dist assets "
+                f"(npm exit={exc.returncode})."
+            )
+            return
+        raise RuntimeError(
+            "Frontend build failed and no prebuilt orbit_visualizer/dist bundle is present."
+        ) from exc
 
 
 class build_py(_build_py):
