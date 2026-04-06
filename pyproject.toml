@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "orbit-visualizer"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Interactive orbit visualizer for COASTSim DITL simulations"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.10"
@@ -25,3 +25,8 @@ include-package-data = true
 orbit_visualizer = [
     "dist/**/*",
 ]
+
+[tool.setuptools_scm]
+# If no git tags are present in a clone, keep a stable baseline.
+fallback_version = "0.1.1"
+local_scheme = "no-local-version"
