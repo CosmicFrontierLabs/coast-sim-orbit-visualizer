@@ -13,6 +13,7 @@ Usage from Python (e.g. a Jupyter notebook after running a DITL simulation)::
 from __future__ import annotations
 
 import threading
+import time
 import webbrowser
 from typing import TYPE_CHECKING
 
@@ -66,8 +67,11 @@ def launch(
     server = uvicorn.Server(config)
 
     if open_browser:
+        # Add a cache-busting query parameter so repeated launch() calls
+        # cannot reopen a stale cached frontend page.
+        cache_buster = int(time.time() * 1000)
         threading.Timer(
-            1.5, lambda: webbrowser.open(f"http://localhost:{port}")
+            1.5, lambda: webbrowser.open(f"http://localhost:{port}/?v={cache_buster}")
         ).start()
 
     if blocking:

@@ -17,7 +17,7 @@ Usage (file-based)::
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -43,17 +43,18 @@ PLANS_DIR = Path(os.environ.get("PLANS_DIR", str(_DEFAULT_PLANS_DIR)))
 
 _PKG_ROOT = Path(__file__).parent
 _REPO_ROOT = _PKG_ROOT.parent
+_ALLOW_REPO_FALLBACK = os.environ.get("ORBIT_VISUALIZER_ALLOW_REPO_DIST_FALLBACK") == "1"
 
 _DIST_DIR = _PKG_ROOT / "dist"
-if not _DIST_DIR.is_dir():
+if not _DIST_DIR.is_dir() and _ALLOW_REPO_FALLBACK:
     _DIST_DIR = _REPO_ROOT / "dist"
 
 _MODEL_DIR = _DIST_DIR / "model"
-if not _MODEL_DIR.is_dir():
+if not _MODEL_DIR.is_dir() and _ALLOW_REPO_FALLBACK:
     _MODEL_DIR = _REPO_ROOT / "model"
 
 _TEXTURES_DIR = _DIST_DIR / "textures"
-if not _TEXTURES_DIR.is_dir():
+if not _TEXTURES_DIR.is_dir() and _ALLOW_REPO_FALLBACK:
     _TEXTURES_DIR = _REPO_ROOT / "textures"
 
 # In-memory DITL payload set by launch() / set_data()
@@ -71,6 +72,28 @@ def set_viz_data(payload: dict) -> None:
     """Load the 3-D VizData payload for the frontend."""
     global _viz_data
     _viz_data = payload
+
+
+@app.middleware("http")
+async def disable_frontend_caching(request: Request, call_next):
+    """Disable browser caching for frontend assets to avoid stale UIs."""
+    response = await call_next(request)
+    path = request.url.path
+    is_frontend = (
+        path == "/"
+        or path.startswith("/assets/")
+        or path.startswith("/model/")
+        or path.startswith("/textures/")
+        or path.endswith(".js")
+        or path.endswith(".css")
+        or path.endswith(".html")
+        or path.endswith(".map")
+    )
+    if request.method == "GET" and is_frontend:
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 
 # ---------------------------------------------------------------------------

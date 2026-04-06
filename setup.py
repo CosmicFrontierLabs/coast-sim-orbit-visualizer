@@ -32,6 +32,29 @@ def _build_frontend() -> None:
     try:
         subprocess.run([npm, "run", "build"], cwd=repo_root, check=True)
     except subprocess.CalledProcessError as exc:
+        # In isolated build environments, node_modules is often missing.
+        # Install JS deps (including dev deps like vite) and retry once.
+        install_cmd = [npm, "ci", "--include=dev"]
+        if not (repo_root / "package-lock.json").is_file():
+            install_cmd = [npm, "install", "--include=dev"]
+
+        print(
+            "Frontend build failed; attempting to install npm dependencies "
+            f"and retry (npm exit={exc.returncode})."
+        )
+        try:
+            subprocess.run(install_cmd, cwd=repo_root, check=True)
+            subprocess.run([npm, "run", "build"], cwd=repo_root, check=True)
+            return
+        except subprocess.CalledProcessError as retry_exc:
+            if dist_index.is_file():
+                print(
+                    "Frontend build failed after retry; using existing "
+                    "orbit_visualizer/dist assets "
+                    f"(npm exit={retry_exc.returncode})."
+                )
+                return
+
         if dist_index.is_file():
             print(
                 "Frontend build failed; using existing orbit_visualizer/dist assets "
@@ -46,6 +69,11 @@ def _build_frontend() -> None:
 class build_py(_build_py):
     def run(self) -> None:
         _build_frontend()
+        # Remove previously copied frontend assets from build/lib to avoid
+        # stale hashed bundles being carried across wheel builds.
+        build_dist = Path(self.build_lib) / "orbit_visualizer" / "dist"
+        if build_dist.is_dir():
+            shutil.rmtree(build_dist)
         super().run()
 
 
