@@ -37,11 +37,11 @@ launch(ditl, blocking=True)         # block until server exits (useful in script
 
 ## What you see
 
-| Panel | Contents |
-| --- | --- |
-| **ORBIT** | Altitude, latitude, longitude, beta angle, eclipse state |
-| **ATTITUDE** | RA, Dec, Roll, solar panel angle to Sun |
-| **TARGET** | Pointing mode and current target name |
+| Panel        | Contents                                                 |
+| ------------ | -------------------------------------------------------- |
+| **ORBIT**    | Altitude, latitude, longitude, beta angle, eclipse state |
+| **ATTITUDE** | RA, Dec, Roll, solar panel angle to Sun                  |
+| **TARGET**   | Pointing mode and current target name                    |
 | **Controls** | Playback speed, axis/grid overlays, camera view selector |
 
 The scrubber timeline at the bottom shows PPST observation windows. Drag the slider or let it play in real time. Camera tracks the spacecraft by default; switch to Earth-fixed or horizon views from the dropdown.
@@ -77,4 +77,3 @@ npm run typecheck
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE).
-

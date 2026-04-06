@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -74,6 +75,128 @@ def _serialize_plan(ditl: "DITL") -> dict:
 # ---------------------------------------------------------------------------
 
 RE_KM = 6371.0
+
+
+def _normalize_vec3(v: object) -> list[float] | None:
+    """Return a normalized 3-vector when *v* can be interpreted as xyz."""
+    import math
+
+    if v is None:
+        return None
+
+    # Axis shorthand strings such as +X, -Y, +Z
+    if isinstance(v, str):
+        s = v.strip().upper().replace(" ", "")
+        axis_map = {
+            "X": [1.0, 0.0, 0.0],
+            "+X": [1.0, 0.0, 0.0],
+            "-X": [-1.0, 0.0, 0.0],
+            "Y": [0.0, 1.0, 0.0],
+            "+Y": [0.0, 1.0, 0.0],
+            "-Y": [0.0, -1.0, 0.0],
+            "Z": [0.0, 0.0, 1.0],
+            "+Z": [0.0, 0.0, 1.0],
+            "-Z": [0.0, 0.0, -1.0],
+        }
+        return axis_map.get(s)
+
+    xyz: list[float] | None = None
+    if isinstance(v, Mapping):
+        if all(k in v for k in ("x", "y", "z")):
+            xyz = [float(v["x"]), float(v["y"]), float(v["z"])]
+    elif isinstance(v, (list, tuple)) and len(v) == 3:
+        xyz = [float(v[0]), float(v[1]), float(v[2])]
+    elif all(hasattr(v, a) for a in ("x", "y", "z")):
+        xyz = [float(getattr(v, "x")), float(getattr(v, "y")), float(getattr(v, "z"))]
+
+    if xyz is None:
+        return None
+
+    norm = math.sqrt(xyz[0] ** 2 + xyz[1] ** 2 + xyz[2] ** 2)
+    if norm < 1e-12:
+        return None
+    return [xyz[0] / norm, xyz[1] / norm, xyz[2] / norm]
+
+
+def _get_field(obj: object, names: tuple[str, ...]) -> object | None:
+    if obj is None:
+        return None
+    if isinstance(obj, Mapping):
+        for n in names:
+            if n in obj:
+                return obj[n]
+        return None
+    for n in names:
+        if hasattr(obj, n):
+            return getattr(obj, n)
+    return None
+
+
+def _extract_solar_panel_config(ditl: "DITL") -> dict | None:
+    """Extract canonical panel config from DITL config when available."""
+    cfg = getattr(ditl, "config", None)
+    if cfg is None:
+        return None
+
+    candidates: list[object] = []
+
+    def push(obj: object) -> None:
+        if obj is not None:
+            candidates.append(obj)
+
+    push(_get_field(cfg, ("solar_panel", "solar_panels", "panel", "panels")))
+    sc_cfg = _get_field(cfg, ("spacecraft", "satellite", "bus", "vehicle"))
+    if sc_cfg is not None:
+        push(sc_cfg)
+        push(_get_field(sc_cfg, ("solar_panel", "solar_panels", "panel", "panels")))
+
+    gimbled: bool | None = None
+    direction_sc: list[float] | None = None
+
+    for obj in candidates:
+        g_raw = _get_field(
+            obj,
+            (
+                "gimbled",
+                "is_gimbled",
+                "gimbal",
+                "is_gimbal",
+                "sun_tracking",
+                "track_sun",
+            ),
+        )
+        if g_raw is not None and gimbled is None:
+            try:
+                gimbled = bool(g_raw)
+            except Exception:
+                pass
+
+        d_raw = _get_field(
+            obj,
+            (
+                "direction_sc",
+                "fixed_direction",
+                "direction",
+                "normal",
+                "panel_normal",
+                "vector",
+            ),
+        )
+        if d_raw is not None and direction_sc is None:
+            direction_sc = _normalize_vec3(d_raw)
+
+        if gimbled is not None and direction_sc is not None:
+            break
+
+    if gimbled is None and direction_sc is None:
+        return None
+
+    out: dict = {}
+    if gimbled is not None:
+        out["gimbled"] = gimbled
+    if direction_sc is not None:
+        out["direction_sc"] = direction_sc
+    return out
 
 
 def ditl_to_viz_payload(ditl: "DITL") -> dict:
@@ -169,13 +292,19 @@ def ditl_to_viz_payload(ditl: "DITL") -> dict:
         pass  # Frontend falls back to ram-aligned attitude.
 
     ppst = _serialize_ppst_for_viz(ditl)
+    solar_panel_cfg = _extract_solar_panel_config(ditl)
+
+    meta: dict = {
+        "n_ephem": n,
+        "n_ppst": len(ppst),
+        "n_slews": 0,
+        "mission": getattr(getattr(ditl, "config", None), "name", "SC"),
+    }
+    if solar_panel_cfg is not None:
+        meta["solar_panel"] = solar_panel_cfg
+
     return {
-        "meta": {
-            "n_ephem": n,
-            "n_ppst": len(ppst),
-            "n_slews": 0,
-            "mission": getattr(getattr(ditl, "config", None), "name", "SC"),
-        },
+        "meta": meta,
         "ephem": ephem,
         "ppst": ppst,
         "slews": [],

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { buildAttitudeQ } from "./attitude_math";
 import { activePPST } from "./timeline_utils";
-import { panelDriveModelQ } from "./panel_drive";
+import { panelDriveModelQ, panelFixedModelQ } from "./panel_drive";
 import type { PPSTEntry, SlewWindow, VizData } from "./types";
 
 interface SpacecraftStateDeps {
@@ -95,14 +95,33 @@ export function applySpacecraftState({
     }
   }
 
-  const { qPanelModel } = panelDriveModelQ({
-    bodyQ,
-    sunECI: sunVec,
-    preQ: modelPreQ,
-    panelFaceNormalModel,
-    panelMeshTrimDeg,
-    DEG,
-  });
+  const panelCfg = data.meta.solar_panel;
+  const panelIsGimbled = panelCfg?.gimbled ?? true;
+
+  let qPanelModel: THREE.Quaternion;
+  if (panelIsGimbled) {
+    ({ qPanelModel } = panelDriveModelQ({
+      bodyQ,
+      sunECI: sunVec,
+      preQ: modelPreQ,
+      panelFaceNormalModel,
+      panelMeshTrimDeg,
+      DEG,
+    }));
+  } else {
+    const dir = panelCfg?.direction_sc;
+    const desiredPanelNormalSC = dir
+      ? new THREE.Vector3(dir[0], dir[1], dir[2])
+      : new THREE.Vector3(0, 0, 1);
+    qPanelModel = panelFixedModelQ({
+      desiredPanelNormalSC,
+      preQ: modelPreQ,
+      panelFaceNormalModel,
+      panelMeshTrimDeg,
+      DEG,
+    });
+  }
+
   panelMeshGroup.setRotationFromQuaternion(qPanelModel);
 
   let panelNormalSC = panelFaceNormalModel

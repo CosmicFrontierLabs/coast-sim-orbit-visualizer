@@ -191,3 +191,40 @@ export function panelDriveModelQ({
     panelAlignErrDeg: errRad / DEG,
   };
 }
+
+/**
+ * Compute model-space panel rotation for a fixed spacecraft-frame panel direction.
+ *
+ * @param {Object} deps
+ * @returns {THREE.Quaternion}
+ */
+export function panelFixedModelQ({
+  desiredPanelNormalSC,
+  preQ,
+  panelFaceNormalModel,
+  panelMeshTrimDeg,
+  DEG,
+}: {
+  desiredPanelNormalSC: THREE.Vector3;
+  preQ: THREE.Quaternion;
+  panelFaceNormalModel: THREE.Vector3;
+  panelMeshTrimDeg: number;
+  DEG: number;
+}): THREE.Quaternion {
+  const desiredSC = desiredPanelNormalSC.clone();
+  if (desiredSC.lengthSq() < 1e-12) {
+    return new THREE.Quaternion();
+  }
+  desiredSC.normalize();
+
+  const desiredModel = desiredSC.applyQuaternion(preQ.clone().conjugate()).normalize();
+  const qToDesired = new THREE.Quaternion().setFromUnitVectors(panelFaceNormalModel, desiredModel);
+
+  const qTrimSC = new THREE.Quaternion().setFromAxisAngle(
+    new THREE.Vector3(0, 1, 0),
+    panelMeshTrimDeg * DEG,
+  );
+  const qTrimModel = preQ.clone().conjugate().multiply(qTrimSC).multiply(preQ);
+
+  return qToDesired.multiply(qTrimModel);
+}

@@ -52,6 +52,10 @@ export interface VizMeta {
   n_ephem: number;
   n_ppst: number;
   n_slews?: number;
+  solar_panel?: {
+    gimbled?: boolean;
+    direction_sc?: EciVec;
+  };
 }
 
 export interface VizData {
