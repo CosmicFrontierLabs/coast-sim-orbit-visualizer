@@ -15,7 +15,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: "../dist",
+    outDir: "../orbit_visualizer/dist",
     emptyOutDir: true,
   },
 });

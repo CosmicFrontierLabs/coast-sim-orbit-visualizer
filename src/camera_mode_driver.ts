@@ -12,9 +12,6 @@ export function applyCameraMode({
   cameraViewMode,
   orbitCtl,
   posW,
-  linkPosW,
-  ramVec,
-  linkPovCamera,
   followScCamera,
   camera,
   scRadialBasis,
@@ -23,9 +20,6 @@ export function applyCameraMode({
   cameraViewMode: CameraViewMode;
   orbitCtl: OrbitControls;
   posW: THREE.Vector3;
-  linkPosW: THREE.Vector3;
-  ramVec: THREE.Vector3;
-  linkPovCamera: { apply: (state: { posW: THREE.Vector3; linkPosW: THREE.Vector3; ramVec: THREE.Vector3 }) => void };
   followScCamera: (deps: {
     camera: THREE.PerspectiveCamera;
     orbitCtl: OrbitControls;
@@ -41,12 +35,6 @@ export function applyCameraMode({
     orbitCtl.enabled = true;
     orbitCtl.target.set(0, 0, 0);
     updateCameraClipping();
-    return;
-  }
-
-  if (cameraViewMode === "link-pov") {
-    orbitCtl.enabled = false;
-    linkPovCamera.apply({ posW, linkPosW, ramVec });
     return;
   }
 

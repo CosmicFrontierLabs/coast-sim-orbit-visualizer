@@ -28,7 +28,6 @@ interface RunVizFrameDeps {
   scale: number;
   deg: number;
   sunDist: number;
-  linkTrailWu: number;
   panelMeshTrimDeg: number;
   scDiagWu: number;
   scScreenFraction: number;
@@ -37,9 +36,7 @@ interface RunVizFrameDeps {
   orbitCtl: OrbitControls;
   updateCameraClipping: () => void;
   scRadialBasis: (p: THREE.Vector3) => BasisRTB;
-  linkPovCamera: { apply: (state: { posW: THREE.Vector3; linkPosW: THREE.Vector3; ramVec: THREE.Vector3 }) => void };
   scGroup: THREE.Group;
-  linkGroup: THREE.Group;
   panelMeshGroup: THREE.Group;
   panelGroup: THREE.Group;
   modelGroup: THREE.Group;
@@ -97,7 +94,6 @@ export function runVizFrame({
   scale,
   deg,
   sunDist,
-  linkTrailWu,
   panelMeshTrimDeg,
   scDiagWu,
   scScreenFraction,
@@ -106,9 +102,7 @@ export function runVizFrame({
   orbitCtl,
   updateCameraClipping,
   scRadialBasis,
-  linkPovCamera,
   scGroup,
-  linkGroup,
   panelMeshGroup,
   panelGroup,
   modelGroup,
@@ -178,7 +172,7 @@ export function runVizFrame({
     showSun,
   });
 
-  const { ppt, linkPosW, panelSunAngleDeg } = applySpacecraftState({
+  const { ppt, panelSunAngleDeg } = applySpacecraftState({
     simTime,
     data,
     ra,
@@ -190,8 +184,6 @@ export function runVizFrame({
     sunVec,
     sunMesh,
     scGroup,
-    linkGroup,
-    linkTrailWu,
     axVel,
     axScSun,
     showScSun,
@@ -212,12 +204,10 @@ export function runVizFrame({
       camera,
       orbitCtl,
       scPos: posW.clone(),
-      linkPos: linkGroup.position.clone(),
       scRadialBasis,
       DEG: deg,
       SC_DIAG_WU: scDiagWu,
       SC_SCREEN_FRACTION: scScreenFraction,
-      LINK_TRAIL_WU: linkTrailWu,
       updateCameraClipping,
     });
     camInitDone = true;
@@ -229,7 +219,6 @@ export function runVizFrame({
       camera,
       orbitCtl,
       posW,
-      linkPos: linkPosW,
       ramVec,
       scRadialBasis,
       updateCameraClipping,
@@ -242,9 +231,6 @@ export function runVizFrame({
     cameraViewMode,
     orbitCtl,
     posW,
-    linkPosW,
-    ramVec,
-    linkPovCamera,
     followScCamera,
     camera,
     scRadialBasis,

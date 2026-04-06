@@ -7,7 +7,6 @@ import {
   CAMERA_NEAR_FRAC,
   CLOUD_RADIUS,
   DEG,
-  LINK_SIZE_WU,
   MOON_EPOCH_UNIX,
   MOON_INCLINATION_RAD,
   MOON_NODE_RAD,
@@ -274,18 +273,6 @@ export function createSceneGraph({ assetBase }: { assetBase: string }) {
   const panelMeshGroup = new THREE.Group();
   modelGroup.add(panelMeshGroup);
 
-  const linkGroup = new THREE.Group();
-  scene.add(linkGroup);
-  const linkMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(LINK_SIZE_WU * 0.5, 12, 12),
-    new THREE.MeshPhongMaterial({
-      color: 0x55ccff,
-      emissive: 0x113355,
-      shininess: 20,
-    }),
-  );
-  linkGroup.add(linkMesh);
-
   const fallback = new THREE.Mesh(
     new THREE.BoxGeometry(2.0 / (RE_KM * 1000), 6.0 / (RE_KM * 1000), 2.5 / (RE_KM * 1000)),
     new THREE.MeshPhongMaterial({ color: 0xaaaaaa }),
@@ -372,7 +359,6 @@ export function createSceneGraph({ assetBase }: { assetBase: string }) {
     scGroup,
     modelGroup,
     panelMeshGroup,
-    linkGroup,
     fallback,
     panelGroup,
     axVel,

@@ -5,10 +5,12 @@ Interactive 3-D orbit visualizer for [COASTSim](../README.md) DITL simulations. 
 ## Installation
 
 ```bash
-# Python package (from the repo root — included in the main coast-sim install)
+# Python package (frontend bundle is included in the wheel)
 pip install -e .
+```
 
-# TypeScript frontend
+```bash
+# Frontend build is only needed when developing this repo
 cd orbit-visualizer
 npm install
 npm run build
@@ -36,19 +38,19 @@ launch(ditl, blocking=True)         # block until server exits (useful in script
 ## What you see
 
 | Panel | Contents |
-|---|---|
+| --- | --- |
 | **ORBIT** | Altitude, latitude, longitude, beta angle, eclipse state |
 | **ATTITUDE** | RA, Dec, Roll, solar panel angle to Sun |
 | **TARGET** | Pointing mode and current target name |
 | **Controls** | Playback speed, axis/grid overlays, camera view selector |
 
-The scrubber timeline at the bottom shows PPST observation windows. Drag the slider or let it play in real time. Camera tracks the spacecraft by default; switch to Earth-fixed, horizon, or link POV views from the dropdown.
+The scrubber timeline at the bottom shows PPST observation windows. Drag the slider or let it play in real time. Camera tracks the spacecraft by default; switch to Earth-fixed or horizon views from the dropdown.
 
 Drag a `viz_data.json` file onto the canvas to load data without a running Python backend.
 
 ## Project layout
 
-```
+```text
 app/                  # Vite entry point (index.html, orbit_viz.ts, CSS)
 src/                  # TypeScript modules (Three.js scene, HUD, controls, …)
 orbit_visualizer/     # Python package (FastAPI server + serializer)

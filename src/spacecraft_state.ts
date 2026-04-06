@@ -18,8 +18,6 @@ interface SpacecraftStateDeps {
   sunVec: THREE.Vector3;
   sunMesh: THREE.Object3D;
   scGroup: THREE.Group;
-  linkGroup: THREE.Group;
-  linkTrailWu: number;
   axVel: THREE.Object3D;
   axScSun: THREE.Object3D;
   showScSun: boolean;
@@ -42,7 +40,6 @@ interface SpacecraftStateDeps {
  * @returns {{
  *   ppt:any,
  *   bodyQ:THREE.Quaternion,
- *   linkPosW:THREE.Vector3,
  *   panelSunAngleDeg:number
  * }}
  */
@@ -58,8 +55,6 @@ export function applySpacecraftState({
   sunVec,
   sunMesh,
   scGroup,
-  linkGroup,
-  linkTrailWu,
   axVel,
   axScSun,
   showScSun,
@@ -76,13 +71,10 @@ export function applySpacecraftState({
 }: SpacecraftStateDeps): {
   ppt: PPSTEntry | null;
   bodyQ: THREE.Quaternion;
-  linkPosW: THREE.Vector3;
   panelSunAngleDeg: number;
 } {
   // PPT is kept for HUD target-name display only; pointing comes from DITL attitude.
   const ppt = activePPST(simTime, data.ppst);
-
-  // Build body quaternion from DITL telemetry attitude when available,
   // otherwise fall back to ram-aligned (nose along velocity vector).
   let bodyQ: THREE.Quaternion;
   if (hasAttitude) {
@@ -93,8 +85,6 @@ export function applySpacecraftState({
 
   scGroup.position.copy(posW);
   scGroup.setRotationFromQuaternion(bodyQ);
-  linkGroup.position.copy(posW).addScaledVector(ramVec, -linkTrailWu);
-  const linkPosW = linkGroup.position;
   setVector(axVel, posW, ramVec);
 
   axScSun.visible = showScSun;
@@ -141,7 +131,6 @@ export function applySpacecraftState({
   return {
     ppt,
     bodyQ,
-    linkPosW,
     panelSunAngleDeg,
   };
 }

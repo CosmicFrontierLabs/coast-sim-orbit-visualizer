@@ -24,8 +24,6 @@ export const SC_SUN_VEC_SHAFT_LEN = SC_DIAG_WU * 2.0;
 export const SC_HEAD_LEN = SC_DIAG_WU * 0.4;
 export const SC_HEAD_W = SC_DIAG_WU * 0.1;
 
-export const LINK_TRAIL_WU = 75.0 / RE_M; // Link trails spacecraft by 75 meters
-export const LINK_SIZE_WU = SC_DIAG_WU * 0.7;
 export const PANEL_MESH_TRIM_DEG = 0.0; // Keep neutral; geometric calibration handles alignment
 
 // Earth/moon display parameters.

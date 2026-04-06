@@ -11,7 +11,6 @@ import { estimatePanelFaceNormalModel, meshAreaAndNormalLocal } from "../src/pan
 import {
   ASSET_BASE,
   DEG,
-  LINK_TRAIL_WU,
   PANEL_MESH_TRIM_DEG,
   RE_KM,
   SCALE,
@@ -23,7 +22,6 @@ import {
 import { createSceneGraph } from "../src/scene_setup";
 import { loadScModel } from "../src/model_loader";
 import { createScMarkerController } from "../src/sc_marker";
-import { createLinkPovCameraController } from "../src/link_pov_camera";
 import { buildCleanSlews } from "../src/viz_data_prep";
 import { applyInitDataSideEffects } from "../src/viz_bootstrap";
 import { runVizFrame } from "../src/frame_driver";
@@ -72,7 +70,6 @@ const {
   scGroup,
   modelGroup,
   panelMeshGroup,
-  linkGroup,
   fallback,
   panelGroup,
   axVel,
@@ -140,15 +137,6 @@ if (scLabelEl) {
   scLabelEl.style.display = "none";
 }
 const scMarker = createScMarkerController({ scene, camera, scDiagWu: SC_DIAG_WU });
-const linkPovCamera = createLinkPovCameraController({
-  domElement: renderer.domElement,
-  camera,
-  orbitCtl,
-  scRadialBasis,
-  updateCameraClipping,
-  linkTrailWu: LINK_TRAIL_WU,
-  getCameraViewMode: () => cameraViewMode,
-});
 
 // ─── Load data ─────────────────────────────────────────────────────────────────
 
@@ -208,17 +196,14 @@ wirePlaybackControls({
 });
 
 mustEl<HTMLButtonElement>("btn-reset-cam").addEventListener("click", () => {
-  linkPovCamera.resetZoom();
   resetCameraToSc({
     camera,
     orbitCtl,
     scPos: scGroup.position.clone(),
-    linkPos: linkGroup.position.clone(),
     scRadialBasis,
     DEG,
     SC_DIAG_WU,
     SC_SCREEN_FRACTION,
-    LINK_TRAIL_WU,
     updateCameraClipping,
   });
 });
@@ -260,7 +245,6 @@ function animate(ts: number): void {
     scale: SCALE,
     deg: DEG,
     sunDist: SUN_DIST,
-    linkTrailWu: LINK_TRAIL_WU,
     panelMeshTrimDeg: PANEL_MESH_TRIM_DEG,
     scDiagWu: SC_DIAG_WU,
     scScreenFraction: SC_SCREEN_FRACTION,
@@ -269,9 +253,7 @@ function animate(ts: number): void {
     orbitCtl,
     updateCameraClipping,
     scRadialBasis,
-    linkPovCamera,
     scGroup,
-    linkGroup,
     panelMeshGroup,
     panelGroup,
     modelGroup,

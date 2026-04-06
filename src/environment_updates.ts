@@ -137,7 +137,6 @@ export function updateCameraForView({
   camera,
   orbitCtl,
   posW,
-  linkPos,
   ramVec,
   scRadialBasis,
   updateCameraClipping,
@@ -147,7 +146,6 @@ export function updateCameraForView({
   camera: THREE.PerspectiveCamera;
   orbitCtl: OrbitControls;
   posW: THREE.Vector3;
-  linkPos?: THREE.Vector3;
   ramVec: THREE.Vector3;
   scRadialBasis: (p: THREE.Vector3) => BasisRTB;
   updateCameraClipping: () => void;
@@ -155,18 +153,6 @@ export function updateCameraForView({
 }): void {
   const basis = scRadialBasis(posW);
   const vHat = ramVec && ramVec.lengthSq() > 1e-12 ? ramVec.clone().normalize() : basis.t.clone();
-
-  if (viewMode === "link-pov") {
-    if (!linkPos) {
-      return;
-    }
-    orbitCtl.target.copy(posW);
-    camera.position.copy(linkPos);
-    camera.up.copy(basis.b);
-    camera.lookAt(posW);
-    updateCameraClipping();
-    return;
-  }
 
   if (viewMode === "earth-fixed") {
     orbitCtl.target.set(0, 0, 0);
@@ -208,37 +194,5 @@ export function updateCameraForView({
     .addScaledVector(basis.r, scDiagWu * 3.2)
     .addScaledVector(basis.b, scDiagWu * 1.8);
   camera.up.copy(basis.b);
-  updateCameraClipping();
-}
-
-/**
- * Keep camera at Link and look toward spacecraft each frame.
- *
- * @param {Object} deps
- * @returns {void}
- */
-export function followLinkPovCamera({
-  camera,
-  orbitCtl,
-  posW,
-  linkPos,
-  scRadialBasis,
-  updateCameraClipping,
-}: {
-  camera: THREE.PerspectiveCamera;
-  orbitCtl: OrbitControls;
-  posW: THREE.Vector3;
-  linkPos?: THREE.Vector3;
-  scRadialBasis: (p: THREE.Vector3) => BasisRTB;
-  updateCameraClipping: () => void;
-}): void {
-  if (!linkPos) {
-    return;
-  }
-  const basis = scRadialBasis(posW);
-  orbitCtl.target.copy(posW);
-  camera.position.copy(linkPos);
-  camera.up.copy(basis.b);
-  camera.lookAt(posW);
   updateCameraClipping();
 }

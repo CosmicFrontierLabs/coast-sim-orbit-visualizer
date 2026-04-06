@@ -4,7 +4,6 @@ export type CameraViewMode =
   | "follow-behind"
   | "follow-above"
   | "pretty"
-  | "link-pov"
   | "earth-fixed";
 
 export type EciVec = [number, number, number];

@@ -41,9 +41,20 @@ app.add_middleware(
 _DEFAULT_PLANS_DIR = Path(__file__).parent.parent.parent / "examples"
 PLANS_DIR = Path(os.environ.get("PLANS_DIR", str(_DEFAULT_PLANS_DIR)))
 
-_DIST_DIR = Path(__file__).parent.parent / "dist"
-_MODEL_DIR = Path(__file__).parent.parent / "model"
-_TEXTURES_DIR = Path(__file__).parent.parent / "textures"
+_PKG_ROOT = Path(__file__).parent
+_REPO_ROOT = _PKG_ROOT.parent
+
+_DIST_DIR = _PKG_ROOT / "dist"
+if not _DIST_DIR.is_dir():
+    _DIST_DIR = _REPO_ROOT / "dist"
+
+_MODEL_DIR = _DIST_DIR / "model"
+if not _MODEL_DIR.is_dir():
+    _MODEL_DIR = _REPO_ROOT / "model"
+
+_TEXTURES_DIR = _DIST_DIR / "textures"
+if not _TEXTURES_DIR.is_dir():
+    _TEXTURES_DIR = _REPO_ROOT / "textures"
 
 # In-memory DITL payload set by launch() / set_data()
 _data: dict | None = None
