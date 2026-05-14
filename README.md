@@ -54,8 +54,8 @@ Drag a `viz_data.json` file onto the canvas to load data without a running Pytho
 app/                  # Vite entry point (index.html, orbit_viz.ts, CSS)
 src/                  # TypeScript modules (Three.js scene, HUD, controls, …)
 orbit_visualizer/     # Python package (FastAPI server + serializer)
-model/                # Spacecraft GLTF model
-textures/             # Earth day/night/cloud textures
+model/                # Optional spacecraft GLTF model assets
+textures/             # Optional Earth texture assets; day texture has a generated fallback
 ```
 
 ## Development
