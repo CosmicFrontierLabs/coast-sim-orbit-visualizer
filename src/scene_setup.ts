@@ -40,6 +40,150 @@ export function moonPositionECI(unix: number): THREE.Vector3 {
   return v;
 }
 
+function canvasContext(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("2D canvas context unavailable");
+  }
+  return ctx;
+}
+
+function createEarthTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 512;
+  const ctx = canvasContext(canvas);
+
+  const ocean = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  ocean.addColorStop(0, "#082a68");
+  ocean.addColorStop(0.5, "#0d5f94");
+  ocean.addColorStop(1, "#061b4d");
+  ctx.fillStyle = ocean;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const landColor = "#3c8a55";
+  const highlandColor = "#7ea76b";
+  const drawLand = (points: Array<[number, number]>, color: string) => {
+    ctx.beginPath();
+    ctx.moveTo(points[0][0] * canvas.width, points[0][1] * canvas.height);
+    for (const [x, y] of points.slice(1)) {
+      ctx.lineTo(x * canvas.width, y * canvas.height);
+    }
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+  };
+
+  drawLand(
+    [
+      [0.15, 0.22],
+      [0.28, 0.18],
+      [0.34, 0.32],
+      [0.31, 0.47],
+      [0.22, 0.44],
+      [0.12, 0.35],
+    ],
+    landColor,
+  );
+  drawLand(
+    [
+      [0.30, 0.55],
+      [0.39, 0.58],
+      [0.43, 0.72],
+      [0.36, 0.88],
+      [0.29, 0.76],
+    ],
+    "#2f7f4a",
+  );
+  drawLand(
+    [
+      [0.48, 0.28],
+      [0.59, 0.21],
+      [0.69, 0.36],
+      [0.64, 0.54],
+      [0.53, 0.48],
+    ],
+    highlandColor,
+  );
+  drawLand(
+    [
+      [0.63, 0.53],
+      [0.76, 0.56],
+      [0.81, 0.75],
+      [0.71, 0.83],
+      [0.60, 0.69],
+    ],
+    landColor,
+  );
+  drawLand(
+    [
+      [0.77, 0.30],
+      [0.92, 0.27],
+      [0.96, 0.42],
+      [0.86, 0.50],
+      [0.76, 0.42],
+    ],
+    "#5f9a54",
+  );
+
+  ctx.fillStyle = "rgba(245, 248, 255, 0.92)";
+  ctx.fillRect(0, 0, canvas.width, 28);
+  ctx.fillRect(0, canvas.height - 30, canvas.width, 30);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.anisotropy = 4;
+  return texture;
+}
+
+function applyEarthTextureSettings(texture: THREE.Texture): THREE.Texture {
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.anisotropy = 4;
+  return texture;
+}
+
+function loadTextureWithFallback(
+  url: string,
+  fallback: THREE.Texture,
+  label: string,
+): THREE.Texture {
+  new THREE.TextureLoader().load(
+    url,
+    (loaded) => {
+      applyEarthTextureSettings(loaded);
+      fallback.image = loaded.image;
+      fallback.needsUpdate = true;
+      loaded.dispose();
+    },
+    undefined,
+    () => {
+      console.warn(`Could not load ${label} texture at ${url}; using generated fallback.`);
+    },
+  );
+  return fallback;
+}
+
+function loadOptionalTexture(
+  url: string,
+  label: string,
+  onLoad: (texture: THREE.Texture) => void,
+): void {
+  new THREE.TextureLoader().load(
+    url,
+    (loaded) => {
+      onLoad(applyEarthTextureSettings(loaded));
+    },
+    undefined,
+    () => {
+      console.warn(`Could not load ${label} texture at ${url}; omitting layer.`);
+    },
+  );
+}
+
 /**
  * Build renderer, camera, scene graph, and runtime helpers for visualization.
  *
@@ -131,18 +275,16 @@ export function createSceneGraph({ assetBase }: { assetBase: string }) {
   scene.add(earthLightTarget);
   sunLight.target = earthLightTarget;
 
-  const texLoader = new THREE.TextureLoader();
-  const earthTex = texLoader.load(assetBase + "textures/earth_day.jpg");
-  const earthNormTex = texLoader.load(assetBase + "textures/earth_normal.jpg");
-  const earthCloudTex = texLoader.load(assetBase + "textures/earth_clouds.png");
-  earthTex.colorSpace = THREE.SRGBColorSpace;
+  const earthTex = loadTextureWithFallback(
+    assetBase + "textures/earth_day.jpg",
+    createEarthTexture(),
+    "Earth day",
+  );
 
   const earthMesh = new THREE.Mesh(
     new THREE.SphereGeometry(1, 64, 64),
     new THREE.MeshStandardMaterial({
       map: earthTex,
-      normalMap: earthNormTex,
-      normalScale: new THREE.Vector2(0.85, 0.85),
       roughness: 1.0,
       metalness: 0.0,
       emissive: new THREE.Color(0x000000),
@@ -152,24 +294,30 @@ export function createSceneGraph({ assetBase }: { assetBase: string }) {
   earthMesh.renderOrder = 1;
   scene.add(earthMesh);
 
+  const cloudMaterial = new THREE.MeshPhongMaterial({
+    transparent: true,
+    opacity: 0.72,
+    alphaTest: 0.02,
+    depthWrite: false,
+    depthTest: true,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+    blending: THREE.NormalBlending,
+  });
   const cloudMesh = new THREE.Mesh(
     new THREE.SphereGeometry(CLOUD_RADIUS, 64, 64),
-    new THREE.MeshPhongMaterial({
-      map: earthCloudTex,
-      transparent: true,
-      opacity: 0.72,
-      alphaTest: 0.02,
-      depthWrite: false,
-      depthTest: true,
-      polygonOffset: true,
-      polygonOffsetFactor: -2,
-      polygonOffsetUnits: -2,
-      blending: THREE.NormalBlending,
-    }),
+    cloudMaterial,
   );
   cloudMesh.rotation.x = 0;
   cloudMesh.renderOrder = 2;
+  cloudMesh.visible = false;
   scene.add(cloudMesh);
+  loadOptionalTexture(assetBase + "textures/earth_clouds.png", "Earth cloud", (texture) => {
+    cloudMaterial.map = texture;
+    cloudMaterial.needsUpdate = true;
+    cloudMesh.visible = true;
+  });
 
   const atmosphereMat = new THREE.ShaderMaterial({
     uniforms: {
