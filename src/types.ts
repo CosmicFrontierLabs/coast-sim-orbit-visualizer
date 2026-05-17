@@ -31,6 +31,8 @@ export interface PPSTEntry {
   dec: number;
   roll: number;
   name: string;
+  obstype?: string;
+  station?: string;
 }
 
 export interface SlewTrackPoint {

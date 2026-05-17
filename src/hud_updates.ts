@@ -83,10 +83,12 @@ export function createHudController(): HudController {
     els.panelSun.textContent = panelSunAngleDeg.toFixed(2);
 
     if (ppt) {
-      els.mode.textContent = "PPT";
-      els.tgt.textContent = ppt.name;
+      const mode = ppt.obstype ?? "PPT";
+      const targetLabel = mode === "GSP" && ppt.station ? ppt.station : ppt.name;
+      els.mode.textContent = mode;
+      els.tgt.textContent = targetLabel;
       const prog = (((simTime - ppt.begin) / (ppt.end - ppt.begin)) * 100).toFixed(0);
-      els.scrubLabel.textContent = `${ppt.name}  ${prog}%`;
+      els.scrubLabel.textContent = `${targetLabel}  ${prog}%`;
       return;
     }
 
