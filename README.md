@@ -20,11 +20,38 @@ npm run build
 
 ## Usage
 
+From a completed DITL object:
+
 ```python
 from orbit_visualizer import launch
 
 ditl.calc()
 launch(ditl)          # starts server + opens http://localhost:8000
+```
+
+To serve supplied spacecraft assets with the live DITL:
+
+```python
+launch(ditl, model_dir="path/to/model")
+```
+
+`model_dir` should contain `spacecraft.glb` and, when needed, a matching
+`spacecraft.config.json`.
+
+From a saved `viz_data.json` artifact:
+
+```bash
+orbit-visualizer \
+  --viz-data path/to/viz_data.json \
+  --model-dir path/to/model
+```
+
+or with `uvicorn` directly:
+
+```bash
+ORBIT_VISUALIZER_VIZ_DATA=path/to/viz_data.json \
+ORBIT_VISUALIZER_MODEL_DIR=path/to/model \
+  uvicorn orbit_visualizer.main:app --host 127.0.0.1 --port 8000
 ```
 
 ### Options
@@ -33,6 +60,7 @@ launch(ditl)          # starts server + opens http://localhost:8000
 launch(ditl, port=8001)             # custom port
 launch(ditl, open_browser=False)    # don't open browser automatically
 launch(ditl, blocking=True)         # block until server exits (useful in scripts)
+launch(ditl, model_dir="...")       # serve supplied spacecraft assets at /model
 ```
 
 ## What you see
@@ -54,7 +82,7 @@ Drag a `viz_data.json` file onto the canvas to load data without a running Pytho
 app/                  # Vite entry point (index.html, orbit_viz.ts, CSS)
 src/                  # TypeScript modules (Three.js scene, HUD, controls, …)
 orbit_visualizer/     # Python package (FastAPI server + serializer)
-model/                # Optional spacecraft GLTF model assets
+model/                # Optional local spacecraft assets served at /model
 textures/             # Optional Earth texture assets; day texture has a generated fallback
 ```
 

@@ -6,14 +6,18 @@ Can be used in two ways:
    ``orbit_visualizer.backend`` to pre-load data from a completed DITL object.
    Endpoints: /data, /trajectory, /telemetry, /meta
 
-2. **File-based** (secondary): serve Plan JSON files from a directory.
+2. **File-based** (secondary): load a saved VizData JSON artifact via
+   ``ORBIT_VISUALIZER_VIZ_DATA`` or serve Plan JSON files from a directory.
    Endpoints: /plans, /plans/{filename}
-   Override the directory with the PLANS_DIR environment variable.
+   Override the plan directory with the PLANS_DIR environment variable and
+   the spacecraft model directory with ORBIT_VISUALIZER_MODEL_DIR.
 
 Usage (file-based)::
-    uvicorn main:app --reload --port 8000
+    ORBIT_VISUALIZER_VIZ_DATA=output_viz/latest_viz_data.json \
+      uvicorn orbit_visualizer.main:app --port 8000
 """
 
+import json
 import os
 from pathlib import Path
 
@@ -49,8 +53,21 @@ _DIST_DIR = _PKG_ROOT / "dist"
 if not _DIST_DIR.is_dir() and _ALLOW_REPO_FALLBACK:
     _DIST_DIR = _REPO_ROOT / "dist"
 
-_MODEL_DIR = _DIST_DIR / "model"
-if not _MODEL_DIR.is_dir() and _ALLOW_REPO_FALLBACK:
+
+def _existing_dir(path: str | Path, label: str) -> Path:
+    directory = Path(path).expanduser()
+    if not directory.is_dir():
+        raise NotADirectoryError(f"{label} does not exist or is not a directory: {directory}")
+    return directory
+
+
+_MODEL_DIR_ENV = os.environ.get("ORBIT_VISUALIZER_MODEL_DIR")
+_MODEL_DIR = (
+    _existing_dir(_MODEL_DIR_ENV, "ORBIT_VISUALIZER_MODEL_DIR")
+    if _MODEL_DIR_ENV
+    else _DIST_DIR / "model"
+)
+if not _MODEL_DIR_ENV and not _MODEL_DIR.is_dir() and _ALLOW_REPO_FALLBACK:
     _MODEL_DIR = _REPO_ROOT / "model"
 
 _TEXTURES_DIR = _DIST_DIR / "textures"
@@ -72,6 +89,40 @@ def set_viz_data(payload: dict) -> None:
     """Load the 3-D VizData payload for the frontend."""
     global _viz_data
     _viz_data = payload
+
+
+def set_model_dir(path: str | Path) -> None:
+    """Set the directory served under /model for supplied spacecraft assets."""
+    global _MODEL_DIR
+    _MODEL_DIR = _existing_dir(path, "model_dir")
+
+
+def _load_json_env(name: str) -> dict | None:
+    raw_path = os.environ.get(name)
+    if not raw_path:
+        return None
+    path = Path(raw_path)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise RuntimeError(f"Failed to load {name}={path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"{name} must point to a JSON object: {path}")
+    return payload
+
+
+def load_startup_payloads() -> None:
+    """Load optional JSON payloads configured through environment variables."""
+    data_payload = _load_json_env("ORBIT_VISUALIZER_DATA")
+    if data_payload is not None:
+        set_data(data_payload)
+
+    viz_payload = _load_json_env("ORBIT_VISUALIZER_VIZ_DATA")
+    if viz_payload is not None:
+        set_viz_data(viz_payload)
+
+
+load_startup_payloads()
 
 
 @app.middleware("http")
@@ -200,8 +251,20 @@ def get_plan(filename: str) -> dict:
     return schema.model_dump(mode="json")
 
 
+@app.get("/model/{asset_path:path}")
+def get_model_asset(asset_path: str) -> FileResponse:
+    """Serve supplied spacecraft model assets."""
+    requested = Path(asset_path)
+    if requested.is_absolute() or ".." in requested.parts:
+        raise HTTPException(status_code=400, detail="Invalid model asset path")
+
+    path = _MODEL_DIR / requested
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"Model asset not found: {asset_path}")
+    return FileResponse(path)
+
+
 # Serve Vite build assets (hashed filenames under dist/assets/).  This mount
 # acts as a catch-all for requests not matched by any API route above.
-app.mount("/model", StaticFiles(directory=_MODEL_DIR, check_dir=False), name="model")
 app.mount("/textures", StaticFiles(directory=_TEXTURES_DIR, check_dir=False), name="textures")
-app.mount("/", StaticFiles(directory=_DIST_DIR, check_dir=False), name="static")
+app.mount("/", StaticFiles(directory=_DIST_DIR, html=True, check_dir=False), name="static")

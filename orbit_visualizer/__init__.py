@@ -15,6 +15,7 @@ from __future__ import annotations
 import threading
 import time
 import webbrowser
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -27,6 +28,7 @@ def launch(
     *,
     open_browser: bool = True,
     blocking: bool = False,
+    model_dir: str | Path | None = None,
 ):
     """Start the orbit-visualizer API server pre-loaded with DITL data.
 
@@ -41,6 +43,8 @@ def launch(
     blocking:
         If True, block until the server exits (useful in scripts).
         If False (default), run in a daemon thread (useful in notebooks).
+    model_dir:
+        Optional directory served under ``/model`` for supplied spacecraft assets.
 
     Returns
     -------
@@ -51,6 +55,9 @@ def launch(
 
     from . import main as _app_module
     from .serializer import ditl_to_payload, ditl_to_viz_payload
+
+    if model_dir is not None:
+        _app_module.set_model_dir(model_dir)
 
     payload = ditl_to_payload(ditl)
     _app_module.set_data(payload)
