@@ -141,8 +141,19 @@ def _extract_solar_panel_config(ditl: "DITL") -> dict | None:
     candidates: list[object] = []
 
     def push(obj: object) -> None:
-        if obj is not None:
-            candidates.append(obj)
+        if obj is None:
+            return
+        if isinstance(obj, (list, tuple)):
+            candidates.extend(item for item in obj if item is not None)
+            return
+        candidates.append(obj)
+        panels = _get_field(obj, ("panels",))
+        if isinstance(panels, Mapping):
+            candidates.extend(item for item in panels.values() if item is not None)
+        elif isinstance(panels, (list, tuple)):
+            candidates.extend(item for item in panels if item is not None)
+        elif panels is not None:
+            candidates.append(panels)
 
     push(_get_field(cfg, ("solar_panel", "solar_panels", "panel", "panels")))
     sc_cfg = _get_field(cfg, ("spacecraft", "satellite", "bus", "vehicle"))
@@ -208,7 +219,7 @@ def ditl_to_viz_payload(ditl: "DITL") -> dict:
     dict matching the VizData TypeScript interface:
         meta     – { n_ephem, n_ppst, n_slews, mission }
         ephem    – { utime, posvec, sunvec, ramvec, polevec, lat, lon, beta, ineclipse }
-        ppst     – list of { begin, end, ra, dec, roll, name }
+        ppst     – list of { begin, end, ra, dec, roll, name, obstype?, station? }
         slews    – [] (slew interpolation not currently extracted)
     """
     import numpy as np
@@ -320,7 +331,7 @@ def _extract_attitude_arrays(
     then normalises into the conventional ranges:
     * RA  → [0, 360)
     * Dec → unclamped (linear in degrees)
-    * Roll → (−180, 180]
+    * Roll → (-180, 180]
     """
     import numpy as np
 
@@ -355,7 +366,8 @@ def _extract_attitude_arrays(
 
     ra_deg = np.degrees(ra_interp) % 360.0
     dec_deg = np.degrees(dec_interp)
-    roll_deg = (np.degrees(roll_interp) % 360.0) - 180.0
+    roll_deg = ((np.degrees(roll_interp) + 180.0) % 360.0) - 180.0
+    roll_deg = np.where(roll_deg == -180.0, 180.0, roll_deg)
 
     return ra_deg.tolist(), dec_deg.tolist(), roll_deg.tolist()
 
@@ -379,7 +391,11 @@ def _serialize_ppst_for_viz(ditl: "DITL") -> list[dict]:
             "dec": float(e.get("dec", 0.0)),
             "roll": float(e.get("roll", 0.0)),
             "name": str(e.get("name", "")),
+            "obstype": str(e.get("obstype") or e.get("type") or "PPT"),
         })
+        station = e.get("station")
+        if station:
+            ppst[-1]["station"] = str(station)
     return ppst
 
 
