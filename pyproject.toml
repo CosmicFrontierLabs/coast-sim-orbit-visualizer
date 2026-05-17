@@ -14,6 +14,9 @@ dependencies = [
     "coast-sim>=0.1",
 ]
 
+[project.scripts]
+orbit-visualizer = "orbit_visualizer.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["orbit_visualizer*"]
