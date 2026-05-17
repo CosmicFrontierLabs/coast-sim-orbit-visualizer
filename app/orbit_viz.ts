@@ -21,6 +21,7 @@ import {
 } from "../src/constants";
 import { createSceneGraph } from "../src/scene_setup";
 import { loadScModel } from "../src/model_loader";
+import { loadSpacecraftModelConfig, modelPreRotationFromConfig } from "../src/model_config";
 import { createScMarkerController } from "../src/sc_marker";
 import { buildCleanSlews } from "../src/viz_data_prep";
 import { applyInitDataSideEffects } from "../src/viz_bootstrap";
@@ -77,8 +78,7 @@ const {
   setVector,
 } = createSceneGraph({ assetBase: ASSET_BASE });
 
-// Fixed model pre-rotation (+Y model axis -> boresight/XRT).
-const modelPreQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2);
+const modelPreQ = new THREE.Quaternion();
 
 const loader = createLoaderController({
   assetBase: ASSET_BASE,
@@ -86,6 +86,14 @@ const loader = createLoaderController({
 });
 const { clearLoading, loadJSON, setLoading, showMessage } = loader;
 const hud = createHudController();
+
+loadSpacecraftModelConfig(ASSET_BASE)
+  .then((modelConfig) => {
+    modelPreQ.copy(modelPreRotationFromConfig(modelConfig));
+  })
+  .catch((err: unknown) => {
+    console.warn("Spacecraft model config is invalid; using default axes", err);
+  });
 
 // Load spacecraft model
 renderer.outputColorSpace = THREE.SRGBColorSpace;
