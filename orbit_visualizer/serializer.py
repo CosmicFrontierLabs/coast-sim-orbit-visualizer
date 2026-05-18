@@ -220,6 +220,7 @@ def ditl_to_viz_payload(ditl: "DITL") -> dict:
         meta     – { n_ephem, n_ppst, n_slews, mission }
         ephem    – { utime, posvec, sunvec, ramvec, polevec, lat, lon, beta, ineclipse }
         ppst     – list of { begin, end, ra, dec, roll, name, obstype?, station?,
+                   slewtime?, slewdist?, exposure?, contact_begin?, contact_end?,
                    track_start_ra?, track_start_dec?, track_end_ra?, track_end_dec? }
         slews    – [] (slew interpolation not currently extracted)
     """
@@ -401,6 +402,19 @@ def _serialize_plan_entry_for_viz(e: Mapping) -> dict | None:
         "name": str(e.get("name", "")),
         "obstype": str(e.get("obstype") or e.get("type") or "PPT"),
     }
+    for field in ("slewtime", "slewdist", "exposure"):
+        value = e.get(field)
+        if value is not None:
+            entry[field] = float(value)
+
+    for source, dest in (
+        ("contact_begin", "contact_begin"),
+        ("contact_end", "contact_end"),
+    ):
+        value = _to_unix(e.get(source))
+        if value is not None:
+            entry[dest] = value
+
     for field in (
         "track_start_ra",
         "track_start_dec",

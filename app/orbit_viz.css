@@ -56,6 +56,13 @@ canvas {
   color: #eee;
 }
 
+.multiline {
+  display: block;
+  white-space: pre-line;
+  line-height: 1.45;
+  max-width: 260px;
+}
+
 #scrubber {
   position: absolute;
   bottom: 0;
@@ -95,33 +102,69 @@ canvas {
 
 #scrub-track {
   position: relative;
-  height: 28px;
+  height: 42px;
 }
 
 #scrub-marks {
   position: absolute;
   left: 0;
   right: 0;
-  top: 5px;
-  height: 18px;
+  top: 3px;
+  height: 36px;
   pointer-events: none;
 }
 
-.ppst-seg {
+.timeline-seg {
   position: absolute;
-  top: 0;
-  height: 18px;
+  height: 12px;
   background: rgba(100, 160, 255, 0.28);
   border-left: 1px solid #4af;
   border-right: 1px solid #4af;
-  cursor: pointer;
-  pointer-events: all;
   border-radius: 2px;
-  transition: background 0.15s;
+  transition: background 0.15s, box-shadow 0.15s, opacity 0.15s;
+  pointer-events: none;
 }
 
-.ppst-seg:hover {
-  background: rgba(100, 180, 255, 0.55);
+.timeline-seg-entry {
+  top: 14px;
+  background: rgba(100, 160, 255, 0.25);
+  border-color: #4af;
+}
+
+.timeline-seg-type-charge {
+  background: rgba(255, 190, 70, 0.33);
+  border-color: #fb6;
+}
+
+.timeline-seg-gsp {
+  top: 14px;
+  background: rgba(80, 220, 150, 0.38);
+  border-color: #5f9;
+}
+
+.timeline-seg-gap {
+  top: 30px;
+  height: 6px;
+  background: rgba(180, 180, 200, 0.18);
+  border: 1px dashed rgba(190, 200, 220, 0.45);
+}
+
+.timeline-seg-slew {
+  top: 1px;
+  height: 8px;
+  background: rgba(240, 110, 255, 0.52);
+  border-color: #f8f;
+  z-index: 1;
+}
+
+.timeline-seg-active {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+
+.timeline-seg-selected {
+  background: rgba(255, 255, 255, 0.45);
+  box-shadow: 0 0 0 2px #fff, 0 0 12px rgba(120, 190, 255, 0.9);
+  z-index: 2;
 }
 
 #scrub-slider {
@@ -130,7 +173,7 @@ canvas {
   right: 0;
   top: 0;
   width: 100%;
-  height: 28px;
+  height: 42px;
   margin: 0;
   -webkit-appearance: none;
   appearance: none;
@@ -143,7 +186,7 @@ canvas {
   height: 4px;
   background: #223;
   border-radius: 2px;
-  margin-top: 12px;
+  margin-top: 19px;
 }
 
 #scrub-slider::-webkit-slider-thumb {
@@ -161,6 +204,7 @@ canvas {
   height: 4px;
   background: #223;
   border-radius: 2px;
+  margin-top: 19px;
 }
 
 #scrub-slider::-moz-range-thumb {

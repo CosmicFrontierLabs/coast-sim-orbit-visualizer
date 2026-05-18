@@ -55,6 +55,11 @@ class SerializerTests(unittest.TestCase):
             "name": "TRO_PASS",
             "obstype": "GSP",
             "station": "TRO",
+            "slewtime": 240,
+            "slewdist": 12.5,
+            "exposure": 480,
+            "contact_begin": "1970-01-01T00:02:00+00:00",
+            "contact_end": "1970-01-01T00:10:00+00:00",
             "track_start_ra": 23.418,
             "track_start_dec": 21.232,
             "track_end_ra": 231.672,
@@ -64,6 +69,11 @@ class SerializerTests(unittest.TestCase):
         self.assertIsNotNone(entry)
         assert entry is not None
         self.assertEqual(entry["station"], "TRO")
+        self.assertEqual(entry["slewtime"], 240.0)
+        self.assertEqual(entry["slewdist"], 12.5)
+        self.assertEqual(entry["exposure"], 480.0)
+        self.assertEqual(entry["contact_begin"], 120.0)
+        self.assertEqual(entry["contact_end"], 600.0)
         self.assertEqual(entry["track_start_ra"], 23.418)
         self.assertEqual(entry["track_start_dec"], 21.232)
         self.assertEqual(entry["track_end_ra"], 231.672)

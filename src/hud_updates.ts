@@ -1,5 +1,6 @@
-import type { PPSTEntry } from "./types";
+import type { PPSTEntry, TimelineSegment, VizData } from "./types";
 import { ppstDisplayName, ppstTitle } from "./timeline_utils";
+import { segmentDetail } from "./timeline_segments";
 
 interface OrbitHudState {
   alt: number;
@@ -23,6 +24,7 @@ interface HudController {
   setInitMode: (nSlews: number) => void;
   updateOrbitHud: (state: OrbitHudState) => void;
   updateAttitudeHud: (state: AttitudeHudState) => void;
+  updateSelectionHud: (segment: TimelineSegment | null, data: VizData | null) => void;
 }
 
 function mustEl<T extends HTMLElement>(id: string): T {
@@ -54,6 +56,9 @@ export function createHudController(): HudController {
     roll: mustEl<HTMLElement>("h-roll"),
     panelSun: mustEl<HTMLElement>("h-panel-sun"),
     tgt: mustEl<HTMLElement>("h-tgt"),
+    selKind: mustEl<HTMLElement>("h-sel-kind"),
+    selName: mustEl<HTMLElement>("h-sel-name"),
+    selDetail: mustEl<HTMLElement>("h-sel-detail"),
     scrubLabel: mustEl<HTMLElement>("scrub-label"),
   };
 
@@ -103,9 +108,28 @@ export function createHudController(): HudController {
     els.scrubLabel.title = "";
   }
 
+  function updateSelectionHud(segment: TimelineSegment | null, data: VizData | null): void {
+    if (!segment) {
+      els.selKind.textContent = "None";
+      els.selName.textContent = "Click a timeline segment";
+      els.selDetail.textContent = "";
+      els.selName.title = "";
+      els.selDetail.title = "";
+      return;
+    }
+
+    els.selKind.textContent = segment.kind.toUpperCase();
+    els.selName.textContent = segment.label;
+    els.selName.title = segment.title;
+    const detail = segmentDetail(segment, data ?? undefined);
+    els.selDetail.textContent = detail;
+    els.selDetail.title = detail;
+  }
+
   return {
     setInitMode,
     updateOrbitHud,
     updateAttitudeHud,
+    updateSelectionHud,
   };
 }

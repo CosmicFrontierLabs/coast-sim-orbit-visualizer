@@ -26,7 +26,19 @@ import { createScMarkerController } from "../src/sc_marker";
 import { buildCleanSlews } from "../src/viz_data_prep";
 import { applyInitDataSideEffects } from "../src/viz_bootstrap";
 import { runVizFrame } from "../src/frame_driver";
-import type { CameraViewMode, SlewWindow, VizData } from "../src/types";
+import { buildTimelineSegments, findTimelineSegmentById } from "../src/timeline_segments";
+import {
+  readTimelineUrlState,
+  selectionFromSegment,
+  writeTimelineUrlState,
+} from "../src/selection_state";
+import type {
+  CameraViewMode,
+  SlewWindow,
+  TimelineSegment,
+  TimelineSelection,
+  VizData,
+} from "../src/types";
 
 function mustEl<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -121,6 +133,8 @@ loadScModel({
 
 // ─── Simulation state ─────────────────────────────────────────────────────────
 let DATA: (VizData & { slews: SlewWindow[] }) | null = null;
+let timelineSegments: TimelineSegment[] = [];
+let selection: TimelineSelection | null = null;
 let simTime = 0;
 let playing = true;
 let speedIdx = 3;
@@ -152,7 +166,10 @@ function initData(json: VizData): void {
   const cleanSlews = buildCleanSlews(json);
 
   DATA = { ...json, slews: cleanSlews };
-  simTime = json.ephem.utime[0];
+  timelineSegments = buildTimelineSegments(DATA);
+  const urlState = readTimelineUrlState(timelineSegments, json.ephem.utime);
+  selection = urlState.selection;
+  simTime = urlState.time ?? selection?.focusTime ?? json.ephem.utime[0];
   camInitDone = false;
   cameraViewNeedsSnap = true;
   applyInitDataSideEffects({
@@ -165,6 +182,7 @@ function initData(json: VizData): void {
     buildScrubMarks,
     hud,
   });
+  hud.updateSelectionHud(selectedSegment(), DATA);
 }
 
 // Auto-load viz data from the backend (populated by launch(ditl)).
@@ -174,18 +192,34 @@ loadJSON(`${ASSET_BASE}viz-data`);
 // ─── Scrubber ─────────────────────────────────────────────────────────────────
 const { buildScrubMarks, updateScrubber } = wireScrubber({
   scrubSlider: mustEl<HTMLInputElement>("scrub-slider"),
+  scrubTrack: mustEl<HTMLElement>("scrub-track"),
   scrubMarks: mustEl<HTMLElement>("scrub-marks"),
   scrubTime: mustEl<HTMLElement>("scrub-time"),
   getData: () => DATA,
+  getSegments: () => timelineSegments,
+  getSelection: () => selection,
   getSimTime: () => simTime,
   setSimTime: (t) => {
     simTime = t;
+  },
+  selectSegment: (segment) => {
+    selection = selectionFromSegment(segment);
+    simTime = segment.focusTime;
+    writeTimelineUrlState(selection, simTime);
+    hud.updateSelectionHud(segment, DATA);
+  },
+  onTimeInput: (t) => {
+    writeTimelineUrlState(selection, t);
   },
   resetPrevTs: () => {
     prevTs = null;
   },
   fmtTime,
 });
+
+function selectedSegment(): TimelineSegment | null {
+  return findTimelineSegmentById(timelineSegments, selection?.id ?? null);
+}
 
 // ─── Controls ─────────────────────────────────────────────────────────────────
 wirePlaybackControls({
@@ -292,6 +326,7 @@ function animate(ts: number): void {
   prevTs = frame.prevTs;
   camInitDone = frame.camInitDone;
   cameraViewNeedsSnap = frame.cameraViewNeedsSnap;
+  hud.updateSelectionHud(selectedSegment(), DATA);
   renderer.render(scene, camera);
 }
 

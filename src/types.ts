@@ -33,6 +33,11 @@ export interface PPSTEntry {
   name: string;
   obstype?: string;
   station?: string;
+  slewtime?: number;
+  slewdist?: number;
+  exposure?: number;
+  contact_begin?: number;
+  contact_end?: number;
   track_start_ra?: number;
   track_start_dec?: number;
   track_end_ra?: number;
@@ -69,6 +74,36 @@ export interface VizData {
   ephem: EphemData;
   ppst: PPSTEntry[];
   slews?: SlewWindow[];
+}
+
+export type TimelineSegmentKind = "entry" | "gsp" | "gap" | "slew";
+export type TimelineSegmentLane = "activity" | "slew" | "gap";
+export type TimelineGapBoundary = "leading" | "between" | "trailing";
+
+export interface TimelineSegment {
+  id: string;
+  kind: TimelineSegmentKind;
+  lane: TimelineSegmentLane;
+  start: number;
+  end: number;
+  focusTime: number;
+  label: string;
+  title: string;
+  gapBoundary?: TimelineGapBoundary;
+  entryIndex?: number;
+  prevEntryIndex?: number;
+  nextEntryIndex?: number;
+  slewIndex?: number;
+  entry?: PPSTEntry;
+  slew?: SlewWindow;
+}
+
+export interface TimelineSelection {
+  id: string;
+  kind: TimelineSegmentKind;
+  start: number;
+  end: number;
+  focusTime: number;
 }
 
 export interface BasisRTB {
