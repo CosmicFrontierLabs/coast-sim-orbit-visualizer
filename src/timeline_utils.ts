@@ -20,6 +20,31 @@ export function activePPST(t: number, ppst: PPSTEntry[]): PPSTEntry | null {
   return null;
 }
 
+export function ppstDisplayName(ppt: PPSTEntry): string {
+  const mode = ppt.obstype ?? "PPT";
+  return mode === "GSP" && ppt.station ? ppt.station : ppt.name;
+}
+
+function formatRaDec(ra: number | undefined, dec: number | undefined): string | null {
+  if (ra === undefined || dec === undefined) return null;
+  if (!Number.isFinite(ra) || !Number.isFinite(dec)) return null;
+  return `${ra.toFixed(4)}, ${dec.toFixed(4)}`;
+}
+
+export function ppstTrackingSummary(ppt: PPSTEntry): string | null {
+  const start = formatRaDec(ppt.track_start_ra, ppt.track_start_dec);
+  const end = formatRaDec(ppt.track_end_ra, ppt.track_end_dec);
+  if (!start && !end) return null;
+  if (start && end) return `tracking start RA/Dec ${start}; end RA/Dec ${end}`;
+  return start ? `tracking start RA/Dec ${start}` : `tracking end RA/Dec ${end}`;
+}
+
+export function ppstTitle(ppt: PPSTEntry): string {
+  const name = ppstDisplayName(ppt);
+  const tracking = ppstTrackingSummary(ppt);
+  return tracking ? `${name}\n${tracking}` : name;
+}
+
 /**
  * Find the active slew track at time `t`.
  *

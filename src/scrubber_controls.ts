@@ -1,4 +1,5 @@
 import type { PPSTEntry, VizData } from "./types";
+import { ppstTitle } from "./timeline_utils";
 
 /**
  * Wire timeline scrubber interactions and expose render-loop update helpers.
@@ -74,7 +75,7 @@ export function wireScrubber({
       seg.className = "ppst-seg";
       seg.style.left = `${left}%`;
       seg.style.width = `${Math.max(parseFloat(width), 0.15)}%`;
-      seg.title = p.name;
+      seg.title = ppstTitle(p);
       seg.addEventListener("click", () => {
         setSimTime(p.begin);
         resetPrevTs();

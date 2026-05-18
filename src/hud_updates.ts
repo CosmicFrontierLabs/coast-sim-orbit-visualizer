@@ -1,4 +1,5 @@
 import type { PPSTEntry } from "./types";
+import { ppstDisplayName, ppstTitle } from "./timeline_utils";
 
 interface OrbitHudState {
   alt: number;
@@ -84,17 +85,22 @@ export function createHudController(): HudController {
 
     if (ppt) {
       const mode = ppt.obstype ?? "PPT";
-      const targetLabel = mode === "GSP" && ppt.station ? ppt.station : ppt.name;
+      const targetLabel = ppstDisplayName(ppt);
+      const title = ppstTitle(ppt);
       els.mode.textContent = mode;
       els.tgt.textContent = targetLabel;
+      els.tgt.title = title;
       const prog = (((simTime - ppt.begin) / (ppt.end - ppt.begin)) * 100).toFixed(0);
       els.scrubLabel.textContent = `${targetLabel}  ${prog}%`;
+      els.scrubLabel.title = title;
       return;
     }
 
     els.mode.textContent = "GAP";
     els.tgt.textContent = "—";
+    els.tgt.title = "";
     els.scrubLabel.textContent = "(between observations)";
+    els.scrubLabel.title = "";
   }
 
   return {

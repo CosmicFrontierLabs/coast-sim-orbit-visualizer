@@ -219,7 +219,8 @@ def ditl_to_viz_payload(ditl: "DITL") -> dict:
     dict matching the VizData TypeScript interface:
         meta     – { n_ephem, n_ppst, n_slews, mission }
         ephem    – { utime, posvec, sunvec, ramvec, polevec, lat, lon, beta, ineclipse }
-        ppst     – list of { begin, end, ra, dec, roll, name, obstype?, station? }
+        ppst     – list of { begin, end, ra, dec, roll, name, obstype?, station?,
+                   track_start_ra?, track_start_dec?, track_end_ra?, track_end_dec? }
         slews    – [] (slew interpolation not currently extracted)
     """
     import numpy as np
@@ -378,25 +379,42 @@ def _serialize_ppst_for_viz(ditl: "DITL") -> list[dict]:
 
     plan_dict = PlanSchema.from_plan(ditl.plan).model_dump(mode="json")
     entries = plan_dict.get("entries", [])
-    ppst = []
-    for e in entries:
-        begin = _to_unix(e.get("begin"))
-        end = _to_unix(e.get("end"))
-        if begin is None or end is None or end <= begin:
-            continue
-        ppst.append({
-            "begin": begin,
-            "end": end,
-            "ra": float(e.get("ra", 0.0)),
-            "dec": float(e.get("dec", 0.0)),
-            "roll": float(e.get("roll", 0.0)),
-            "name": str(e.get("name", "")),
-            "obstype": str(e.get("obstype") or e.get("type") or "PPT"),
-        })
-        station = e.get("station")
-        if station:
-            ppst[-1]["station"] = str(station)
-    return ppst
+    return [
+        entry
+        for e in entries
+        if (entry := _serialize_plan_entry_for_viz(e)) is not None
+    ]
+
+
+def _serialize_plan_entry_for_viz(e: Mapping) -> dict | None:
+    begin = _to_unix(e.get("begin"))
+    end = _to_unix(e.get("end"))
+    if begin is None or end is None or end <= begin:
+        return None
+
+    entry = {
+        "begin": begin,
+        "end": end,
+        "ra": float(e.get("ra", 0.0)),
+        "dec": float(e.get("dec", 0.0)),
+        "roll": float(e.get("roll", 0.0)),
+        "name": str(e.get("name", "")),
+        "obstype": str(e.get("obstype") or e.get("type") or "PPT"),
+    }
+    for field in (
+        "track_start_ra",
+        "track_start_dec",
+        "track_end_ra",
+        "track_end_dec",
+    ):
+        value = e.get(field)
+        if value is not None:
+            entry[field] = float(value)
+
+    station = e.get("station")
+    if station:
+        entry["station"] = str(station)
+    return entry
 
 
 def _to_unix(v: object) -> float | None:
