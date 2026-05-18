@@ -33,6 +33,10 @@ export interface PPSTEntry {
   name: string;
   obstype?: string;
   station?: string;
+  track_start_ra?: number;
+  track_start_dec?: number;
+  track_end_ra?: number;
+  track_end_dec?: number;
 }
 
 export interface SlewTrackPoint {
