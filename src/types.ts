@@ -63,9 +63,19 @@ export interface VizMeta {
   n_ephem: number;
   n_ppst: number;
   n_slews?: number;
+  mission?: string;
+  source_plan?: string;
+  tle?: string;
+  coast_sim_head?: string;
+  coast_sim_branch?: string;
+  begin_utc?: string;
+  end_utc?: string;
   solar_panel?: {
     gimbled?: boolean;
     direction_sc?: EciVec;
+  };
+  constraints?: {
+    earth_limb_min_angle_deg?: number;
   };
 }
 

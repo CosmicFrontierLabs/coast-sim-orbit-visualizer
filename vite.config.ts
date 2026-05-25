@@ -1,4 +1,8 @@
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
+
+const repoRoot = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig({
   root: "app",
@@ -17,5 +21,11 @@ export default defineConfig({
   build: {
     outDir: "../orbit_visualizer/dist",
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main: resolve(repoRoot, "app/index.html"),
+        plan_stats: resolve(repoRoot, "app/plan_stats.html"),
+      },
+    },
   },
 });

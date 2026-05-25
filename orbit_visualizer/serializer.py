@@ -210,6 +210,23 @@ def _extract_solar_panel_config(ditl: "DITL") -> dict | None:
     return out
 
 
+def _extract_constraint_config(ditl: "DITL") -> dict | None:
+    """Extract schedule constraint values needed by frontend plan checks."""
+    cfg = getattr(ditl, "config", None)
+    constraint = _get_field(cfg, ("constraint", "constraints"))
+    earth_constraint = _get_field(constraint, ("earth_constraint", "earth_limb_constraint"))
+    earth_min_angle = _get_field(earth_constraint, ("min_angle", "min_angle_deg"))
+
+    out: dict = {}
+    if earth_min_angle is not None:
+        try:
+            out["earth_limb_min_angle_deg"] = float(earth_min_angle)
+        except (TypeError, ValueError):
+            pass
+
+    return out or None
+
+
 def ditl_to_viz_payload(ditl: "DITL") -> dict:
     """Convert a post-``calc()`` DITL object into the VizData JSON consumed by
     the Three.js orbit visualizer frontend.
@@ -306,6 +323,7 @@ def ditl_to_viz_payload(ditl: "DITL") -> dict:
 
     ppst = _serialize_ppst_for_viz(ditl)
     solar_panel_cfg = _extract_solar_panel_config(ditl)
+    constraint_cfg = _extract_constraint_config(ditl)
 
     meta: dict = {
         "n_ephem": n,
@@ -315,6 +333,8 @@ def ditl_to_viz_payload(ditl: "DITL") -> dict:
     }
     if solar_panel_cfg is not None:
         meta["solar_panel"] = solar_panel_cfg
+    if constraint_cfg is not None:
+        meta["constraints"] = constraint_cfg
 
     return {
         "meta": meta,

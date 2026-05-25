@@ -10,6 +10,6 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*.ts", "app/orbit_viz.ts"],
+  "include": ["src/**/*.ts", "app/**/*.ts"],
   "exclude": ["node_modules", "**/*.spec.ts", "src/cli.ts"]
 }
