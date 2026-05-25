@@ -22,6 +22,11 @@ export interface EphemData {
   ra?: number[];
   dec?: number[];
   roll?: number[];
+  // COAST attitude quaternion, scalar-first, ECI-to-body.
+  quat_w?: number[];
+  quat_x?: number[];
+  quat_y?: number[];
+  quat_z?: number[];
 }
 
 export interface PPSTEntry {
@@ -42,6 +47,15 @@ export interface PPSTEntry {
   track_start_dec?: number;
   track_end_ra?: number;
   track_end_dec?: number;
+}
+
+export interface GroundStationMeta {
+  code: string;
+  name?: string;
+  latitude_deg: number;
+  longitude_deg: number;
+  elevation_m?: number;
+  min_elevation_deg?: number;
 }
 
 export interface SlewTrackPoint {
@@ -80,6 +94,7 @@ export interface VizMeta {
     sun_constraint_disabled_in_eclipse?: boolean;
     sun_constraint_eclipse_umbra_only?: boolean;
   };
+  ground_stations?: GroundStationMeta[];
 }
 
 export interface VizData {

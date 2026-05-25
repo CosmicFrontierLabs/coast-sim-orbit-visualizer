@@ -3,7 +3,10 @@ import unittest
 
 from orbit_visualizer.serializer import (
     _extract_attitude_arrays,
+    _extract_attitude_quaternion_arrays,
     _extract_constraint_config,
+    _extract_ground_station_config,
+    _gsp_station_codes,
     _extract_solar_panel_config,
     _serialize_plan_entry_for_viz,
 )
@@ -61,6 +64,57 @@ class SerializerTests(unittest.TestCase):
             },
         )
 
+    def test_extracts_ground_station_locations(self) -> None:
+        ditl = SimpleNamespace(
+            config=SimpleNamespace(
+                ground_stations=SimpleNamespace(
+                    stations=[
+                        SimpleNamespace(
+                            code="tro",
+                            name="Tromso",
+                            latitude_deg=69.65,
+                            longitude_deg=18.96,
+                            elevation_m=0.0,
+                            min_elevation_deg=10.0,
+                        ),
+                        SimpleNamespace(
+                            code="NBO",
+                            name="Nairobi",
+                            latitude_deg=-1.2921,
+                            longitude_deg=36.8219,
+                        ),
+                        SimpleNamespace(code="bad", latitude_deg="nan", longitude_deg=0),
+                    ],
+                ),
+            ),
+        )
+
+        self.assertEqual(
+            _extract_ground_station_config(ditl, station_codes={"TRO"}),
+            [
+                {
+                    "code": "TRO",
+                    "name": "Tromso",
+                    "latitude_deg": 69.65,
+                    "longitude_deg": 18.96,
+                    "elevation_m": 0.0,
+                    "min_elevation_deg": 10.0,
+                },
+            ],
+        )
+
+    def test_gsp_station_codes_are_normalized_from_plan_entries(self) -> None:
+        self.assertEqual(
+            _gsp_station_codes(
+                [
+                    {"obstype": "GSP", "station": "tro"},
+                    {"obstype": "AT", "station": "SGS"},
+                    {"obstype": "GSP", "station": " SGS "},
+                ]
+            ),
+            {"TRO", "SGS"},
+        )
+
     def test_roll_wrap_preserves_body_roll_without_180_degree_offset(self) -> None:
         ditl = SimpleNamespace(
             telemetry=SimpleNamespace(
@@ -77,6 +131,40 @@ class SerializerTests(unittest.TestCase):
         self.assertAlmostEqual(roll[0], -74.0)
         self.assertAlmostEqual(roll[1], 53.0)
         self.assertAlmostEqual(roll[2], 180.0)
+
+    def test_extracts_attitude_quaternions_with_slerp(self) -> None:
+        ditl = SimpleNamespace(
+            telemetry=SimpleNamespace(
+                housekeeping=[
+                    SimpleNamespace(
+                        timestamp=0.0,
+                        quat_w=1.0,
+                        quat_x=0.0,
+                        quat_y=0.0,
+                        quat_z=0.0,
+                    ),
+                    SimpleNamespace(
+                        timestamp=10.0,
+                        quat_w=-0.7071067811865476,
+                        quat_x=0.0,
+                        quat_y=0.0,
+                        quat_z=-0.7071067811865475,
+                    ),
+                ],
+            ),
+        )
+
+        quat_w, quat_x, quat_y, quat_z = _extract_attitude_quaternion_arrays(
+            ditl, [0.0, 5.0, 10.0]
+        )
+
+        self.assertAlmostEqual(quat_w[0], 1.0)
+        self.assertAlmostEqual(quat_x[1], 0.0)
+        self.assertAlmostEqual(quat_y[1], 0.0)
+        self.assertAlmostEqual(quat_w[1], 0.9238795325)
+        self.assertAlmostEqual(quat_z[1], 0.3826834324)
+        self.assertAlmostEqual(quat_w[2], -0.7071067811865476)
+        self.assertAlmostEqual(quat_z[2], -0.7071067811865475)
 
     def test_ppst_preserves_gsp_tracking_fields(self) -> None:
         entry = _serialize_plan_entry_for_viz({

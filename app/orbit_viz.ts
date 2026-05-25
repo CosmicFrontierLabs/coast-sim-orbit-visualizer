@@ -23,6 +23,7 @@ import { createSceneGraph } from "../src/scene_setup";
 import { loadScModel } from "../src/model_loader";
 import { loadSpacecraftModelConfig, modelPreRotationFromConfig } from "../src/model_config";
 import { createScMarkerController } from "../src/sc_marker";
+import { createGroundStationMarkerController } from "../src/ground_station_markers";
 import { buildCleanSlews } from "../src/viz_data_prep";
 import { applyInitDataSideEffects } from "../src/viz_bootstrap";
 import { runVizFrame } from "../src/frame_driver";
@@ -140,7 +141,7 @@ let playing = true;
 let speedIdx = 3;
 let camInitDone = false;
 let prevTs: number | null = null;
-let cameraViewMode: CameraViewMode = "follow-behind";
+let cameraViewMode: CameraViewMode = "pretty";
 let cameraViewNeedsSnap = true;
 
 const cameraViewSel = mustEl<HTMLSelectElement>("camera-view");
@@ -159,6 +160,7 @@ if (scLabelEl) {
   scLabelEl.style.display = "none";
 }
 const scMarker = createScMarkerController({ scene, camera, scDiagWu: SC_DIAG_WU });
+const groundStationMarkers = createGroundStationMarkerController({ earthMesh });
 
 // ─── Load data ─────────────────────────────────────────────────────────────────
 
@@ -166,6 +168,7 @@ function initData(json: VizData): void {
   const cleanSlews = buildCleanSlews(json);
 
   DATA = { ...json, slews: cleanSlews };
+  groundStationMarkers.setStations(json.meta.ground_stations ?? [], json.ppst);
   timelineSegments = buildTimelineSegments(DATA);
   const urlState = readTimelineUrlState(timelineSegments, json.ephem.utime);
   selection = urlState.selection;
@@ -321,6 +324,7 @@ function animate(ts: number): void {
     hud,
     updateScrubber,
     scMarker,
+    groundStationMarkers,
   });
   simTime = frame.simTime;
   prevTs = frame.prevTs;

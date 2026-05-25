@@ -11,6 +11,8 @@ interface SpacecraftStateDeps {
   ra: number;
   dec: number;
   roll: number;
+  /** Actual spacecraft body-to-ECI attitude quaternion, if provided by COAST telemetry. */
+  attitudeQ: THREE.Quaternion | null;
   /** Whether ephem attitude data is available (falls back to ram-aligned if false). */
   hasAttitude: boolean;
   posW: THREE.Vector3;
@@ -49,6 +51,7 @@ export function applySpacecraftState({
   ra,
   dec,
   roll,
+  attitudeQ,
   hasAttitude,
   posW,
   ramVec,
@@ -77,7 +80,9 @@ export function applySpacecraftState({
   const ppt = activePPST(simTime, data.ppst);
   // otherwise fall back to ram-aligned (nose along velocity vector).
   let bodyQ: THREE.Quaternion;
-  if (hasAttitude) {
+  if (attitudeQ) {
+    bodyQ = attitudeQ.clone();
+  } else if (hasAttitude) {
     bodyQ = buildAttitudeQ(ra, dec, roll);
   } else {
     bodyQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), ramVec);

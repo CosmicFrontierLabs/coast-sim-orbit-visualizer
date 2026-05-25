@@ -296,6 +296,92 @@ def _extract_constraint_config(ditl: "DITL") -> dict | None:
     return out or None
 
 
+def _extract_ground_station_config(
+    ditl: "DITL", station_codes: set[str] | None = None
+) -> list[dict] | None:
+    """Extract plan-referenced ground station locations needed by the frontend."""
+    import math
+
+    cfg = getattr(ditl, "config", None)
+    registry = _get_field(
+        cfg,
+        (
+            "ground_stations",
+            "ground_station_registry",
+            "groundstation_registry",
+        ),
+    )
+    stations = _get_field(registry, ("stations",))
+    if stations is None:
+        return None
+
+    if isinstance(stations, Mapping):
+        station_iter = stations.values()
+    elif isinstance(stations, (list, tuple)):
+        station_iter = stations
+    else:
+        return None
+
+    out: list[dict] = []
+    for station in station_iter:
+        code = _get_field(station, ("code", "id"))
+        lat = _get_field(station, ("latitude_deg", "lat_deg", "latitude", "lat"))
+        lon = _get_field(station, ("longitude_deg", "lon_deg", "longitude", "lon"))
+        if code is None or lat is None or lon is None:
+            continue
+
+        code_norm = str(code).strip().upper()
+        if station_codes is not None and code_norm not in station_codes:
+            continue
+
+        try:
+            lat_f = float(lat)
+            lon_f = float(lon)
+        except (TypeError, ValueError):
+            continue
+        if not (math.isfinite(lat_f) and math.isfinite(lon_f)):
+            continue
+
+        entry: dict = {
+            "code": code_norm,
+            "latitude_deg": lat_f,
+            "longitude_deg": lon_f,
+        }
+        name = _get_field(station, ("name",))
+        if name is not None:
+            entry["name"] = str(name)
+
+        elevation = _get_field(station, ("elevation_m", "elevation"))
+        if elevation is not None:
+            try:
+                elevation_f = float(elevation)
+                if math.isfinite(elevation_f):
+                    entry["elevation_m"] = elevation_f
+            except (TypeError, ValueError):
+                pass
+
+        min_elevation = _get_field(station, ("min_elevation_deg", "min_elevation"))
+        if min_elevation is not None:
+            try:
+                min_elevation_f = float(min_elevation)
+                if math.isfinite(min_elevation_f):
+                    entry["min_elevation_deg"] = min_elevation_f
+            except (TypeError, ValueError):
+                pass
+
+        out.append(entry)
+
+    return out or None
+
+
+def _gsp_station_codes(entries: list[dict]) -> set[str]:
+    return {
+        str(entry["station"]).strip().upper()
+        for entry in entries
+        if str(entry.get("obstype", "")).upper() == "GSP" and entry.get("station")
+    }
+
+
 def ditl_to_viz_payload(ditl: "DITL") -> dict:
     """Convert a post-``calc()`` DITL object into the VizData JSON consumed by
     the Three.js orbit visualizer frontend.
@@ -303,7 +389,7 @@ def ditl_to_viz_payload(ditl: "DITL") -> dict:
     Returns
     -------
     dict matching the VizData TypeScript interface:
-        meta     – { n_ephem, n_ppst, n_slews, mission }
+        meta     – { n_ephem, n_ppst, n_slews, mission, ground_stations? }
         ephem    – { utime, posvec, sunvec, ramvec, polevec, lat, lon, beta, ineclipse }
         ppst     – list of { begin, end, ra, dec, roll, name, obstype?, station?,
                    slewtime?, slewdist?, exposure?, contact_begin?, contact_end?,
@@ -390,9 +476,24 @@ def ditl_to_viz_payload(ditl: "DITL") -> dict:
     except Exception:
         pass  # Frontend falls back to ram-aligned attitude.
 
+    try:
+        quat_w, quat_x, quat_y, quat_z = _extract_attitude_quaternion_arrays(
+            ditl, timestamps
+        )
+        ephem["quat_w"] = quat_w
+        ephem["quat_x"] = quat_x
+        ephem["quat_y"] = quat_y
+        ephem["quat_z"] = quat_z
+    except Exception:
+        pass  # Frontend falls back to RA/Dec/Roll attitude.
+
     ppst = _serialize_ppst_for_viz(ditl)
     solar_panel_cfg = _extract_solar_panel_config(ditl)
     constraint_cfg = _extract_constraint_config(ditl)
+    ground_station_cfg = _extract_ground_station_config(
+        ditl,
+        station_codes=_gsp_station_codes(ppst),
+    )
 
     meta: dict = {
         "n_ephem": n,
@@ -404,6 +505,8 @@ def ditl_to_viz_payload(ditl: "DITL") -> dict:
         meta["solar_panel"] = solar_panel_cfg
     if constraint_cfg is not None:
         meta["constraints"] = constraint_cfg
+    if ground_station_cfg is not None:
+        meta["ground_stations"] = ground_station_cfg
 
     return {
         "meta": meta,
@@ -430,20 +533,7 @@ def _extract_attitude_arrays(
     if not hk_list:
         raise ValueError("No housekeeping records in DITL telemetry")
 
-    # Extract source timestamps – try multiple plausible field names.
-    hk_times: list[float] = []
-    for hk in hk_list:
-        for attr in ("timestamp", "time", "utime", "t"):
-            raw = getattr(hk, attr, None)
-            if raw is not None:
-                t = _to_unix(raw)
-                if t is not None:
-                    hk_times.append(t)
-                    break
-        else:
-            raise ValueError(f"Cannot find a timestamp field on housekeeping record: {hk!r}")
-
-    hk_t = np.asarray(hk_times, dtype=float)
+    hk_t = np.asarray(_extract_housekeeping_times(hk_list), dtype=float)
     ra_raw = np.asarray([float(hk.ra) for hk in hk_list], dtype=float)
     dec_raw = np.asarray([float(hk.dec) for hk in hk_list], dtype=float)
     roll_raw = np.asarray([float(hk.roll) for hk in hk_list], dtype=float)
@@ -461,6 +551,105 @@ def _extract_attitude_arrays(
     roll_deg = np.where(roll_deg == -180.0, 180.0, roll_deg)
 
     return ra_deg.tolist(), dec_deg.tolist(), roll_deg.tolist()
+
+
+def _extract_housekeeping_times(hk_list: list[object]) -> list[float]:
+    hk_times: list[float] = []
+    for hk in hk_list:
+        for attr in ("timestamp", "time", "utime", "t"):
+            raw = getattr(hk, attr, None)
+            if raw is not None:
+                t = _to_unix(raw)
+                if t is not None:
+                    hk_times.append(t)
+                    break
+        else:
+            raise ValueError(f"Cannot find a timestamp field on housekeeping record: {hk!r}")
+    return hk_times
+
+
+def _normalize_quat(q: object) -> object:
+    import numpy as np
+
+    q_arr = np.asarray(q, dtype=float)
+    norm = float(np.linalg.norm(q_arr))
+    if norm < 1e-12:
+        raise ValueError("Zero-length attitude quaternion")
+    return q_arr / norm
+
+
+def _slerp_quat(q0: object, q1: object, f: float) -> object:
+    import numpy as np
+
+    q0_arr = _normalize_quat(q0)
+    q1_arr = _normalize_quat(q1)
+    dot = float(np.dot(q0_arr, q1_arr))
+    if dot < 0.0:
+        q1_arr = -q1_arr
+        dot = -dot
+    dot = min(dot, 1.0)
+
+    if dot > 0.9995:
+        return _normalize_quat(q0_arr + f * (q1_arr - q0_arr))
+
+    theta_0 = float(np.arccos(dot))
+    sin_theta_0 = float(np.sin(theta_0))
+    return (
+        np.sin((1.0 - f) * theta_0) * q0_arr
+        + np.sin(f * theta_0) * q1_arr
+    ) / sin_theta_0
+
+
+def _extract_attitude_quaternion_arrays(
+    ditl: "DITL", target_times: list[float]
+) -> tuple[list[float], list[float], list[float], list[float]]:
+    """Interpolate COAST ECI-to-body attitude quaternions onto *target_times*."""
+    import math
+    import numpy as np
+
+    hk_list = ditl.telemetry.housekeeping
+    if not hk_list:
+        raise ValueError("No housekeeping records in DITL telemetry")
+
+    hk_t = np.asarray(_extract_housekeeping_times(hk_list), dtype=float)
+    hk_q = []
+    for hk in hk_list:
+        q = [
+            getattr(hk, "quat_w", None),
+            getattr(hk, "quat_x", None),
+            getattr(hk, "quat_y", None),
+            getattr(hk, "quat_z", None),
+        ]
+        if any(value is None for value in q):
+            raise ValueError("Housekeeping record is missing attitude quaternion")
+        q_f = [float(value) for value in q]
+        if not all(math.isfinite(value) for value in q_f):
+            raise ValueError("Housekeeping record has non-finite attitude quaternion")
+        hk_q.append(_normalize_quat(q_f))
+    hk_q_arr = np.asarray(hk_q, dtype=float)
+
+    out = []
+    for target_t in target_times:
+        if target_t <= hk_t[0]:
+            out.append(hk_q_arr[0])
+            continue
+        if target_t >= hk_t[-1]:
+            out.append(hk_q_arr[-1])
+            continue
+
+        i0 = int(np.searchsorted(hk_t, target_t, side="right") - 1)
+        i1 = min(i0 + 1, len(hk_t) - 1)
+        dt = float(hk_t[i1] - hk_t[i0])
+        f = 0.0 if dt <= 0.0 else float((target_t - hk_t[i0]) / dt)
+        out.append(_slerp_quat(hk_q_arr[i0], hk_q_arr[i1], f))
+
+    out_arr = np.asarray(out, dtype=float)
+    return (
+        out_arr[:, 0].tolist(),
+        out_arr[:, 1].tolist(),
+        out_arr[:, 2].tolist(),
+        out_arr[:, 3].tolist(),
+    )
 
 
 def _serialize_ppst_for_viz(ditl: "DITL") -> list[dict]:
