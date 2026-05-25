@@ -78,9 +78,18 @@ export interface ConstraintSummary {
   earthViolationSamples: number;
   earthPhysicalIntersectionSamples: number;
   earthKeepoutMinMarginDeg: number | null;
-  sunMinAngleDeg: number | null;
-  sunWorstTime: number | null;
-  sunWorstEntry: string | null;
+  sunApplicableMinAngleDeg: number | null;
+  sunApplicableWorstTime: number | null;
+  sunApplicableWorstEntry: string | null;
+  sunKeepoutDeg: number;
+  sunKeepoutConfigured: boolean;
+  sunKeepoutDisabledInEclipse: boolean;
+  sunKeepoutUmbraOnly: boolean | null;
+  sunKeepoutSamples: number;
+  sunViolationSamples: number;
+  sunKeepoutMinMarginDeg: number | null;
+  sunKeepoutWorstTime: number | null;
+  sunKeepoutWorstEntry: string | null;
 }
 
 export interface AttitudeConsistencySummary {
@@ -589,11 +598,43 @@ function configuredEarthLimbMinAngleDeg(data: VizData, options: PlanStatsOptions
   return { value: 0, configured: false };
 }
 
+function configuredSunKeepout(data: VizData): {
+  value: number;
+  configured: boolean;
+  disabledInEclipse: boolean;
+  umbraOnly: boolean | null;
+} {
+  const meta = data.meta.constraints;
+  const value = meta?.sun_min_angle_deg;
+  if (!finiteNumber(value) || value < 0) {
+    return {
+      value: 0,
+      configured: false,
+      disabledInEclipse: false,
+      umbraOnly: null,
+    };
+  }
+
+  return {
+    value,
+    configured: true,
+    disabledInEclipse: meta?.sun_constraint_disabled_in_eclipse === true,
+    umbraOnly:
+      typeof meta?.sun_constraint_eclipse_umbra_only === "boolean"
+        ? meta.sun_constraint_eclipse_umbra_only
+        : null,
+  };
+}
+
 function computeConstraints(
   data: VizData,
   entries: WindowRef[],
   earthKeepoutDeg: number,
   earthKeepoutConfigured: boolean,
+  sunKeepoutDeg: number,
+  sunKeepoutConfigured: boolean,
+  sunKeepoutDisabledInEclipse: boolean,
+  sunKeepoutUmbraOnly: boolean | null,
 ): ConstraintSummary {
   const ra = data.ephem.ra;
   const dec = data.ephem.dec;
@@ -608,9 +649,18 @@ function computeConstraints(
       earthViolationSamples: 0,
       earthPhysicalIntersectionSamples: 0,
       earthKeepoutMinMarginDeg: null,
-      sunMinAngleDeg: null,
-      sunWorstTime: null,
-      sunWorstEntry: null,
+      sunApplicableMinAngleDeg: null,
+      sunApplicableWorstTime: null,
+      sunApplicableWorstEntry: null,
+      sunKeepoutDeg,
+      sunKeepoutConfigured,
+      sunKeepoutDisabledInEclipse,
+      sunKeepoutUmbraOnly,
+      sunKeepoutSamples: 0,
+      sunViolationSamples: 0,
+      sunKeepoutMinMarginDeg: null,
+      sunKeepoutWorstTime: null,
+      sunKeepoutWorstEntry: null,
     };
   }
 
@@ -621,9 +671,14 @@ function computeConstraints(
   let earthViolationSamples = 0;
   let earthPhysicalIntersectionSamples = 0;
   let earthKeepoutMinMarginDeg: number | null = null;
-  let sunMinAngleDeg: number | null = null;
-  let sunWorstTime: number | null = null;
-  let sunWorstEntry: string | null = null;
+  let sunApplicableMinAngleDeg: number | null = null;
+  let sunApplicableWorstTime: number | null = null;
+  let sunApplicableWorstEntry: string | null = null;
+  let sunKeepoutSamples = 0;
+  let sunViolationSamples = 0;
+  let sunKeepoutMinMarginDeg: number | null = null;
+  let sunKeepoutWorstTime: number | null = null;
+  let sunKeepoutWorstEntry: string | null = null;
 
   data.ephem.utime.forEach((t, i) => {
     if (!finiteNumber(ra[i]) || !finiteNumber(dec[i])) return;
@@ -657,10 +712,23 @@ function computeConstraints(
 
     if (sun && sun.lengthSq() > 0) {
       const sunAngle = angleDeg(boresight, sun);
-      if (sunMinAngleDeg === null || sunAngle < sunMinAngleDeg) {
-        sunMinAngleDeg = sunAngle;
-        sunWorstTime = t;
-        sunWorstEntry = activeLabel;
+      const inEclipse = numericField(data.ephem.ineclipse[i]) > 0;
+
+      const keepoutApplies = sunKeepoutConfigured && !(sunKeepoutDisabledInEclipse && inEclipse);
+      if (keepoutApplies) {
+        sunKeepoutSamples += 1;
+        if (sunApplicableMinAngleDeg === null || sunAngle < sunApplicableMinAngleDeg) {
+          sunApplicableMinAngleDeg = sunAngle;
+          sunApplicableWorstTime = t;
+          sunApplicableWorstEntry = activeLabel;
+        }
+        const keepoutMargin = sunAngle - sunKeepoutDeg;
+        if (sunKeepoutMinMarginDeg === null || keepoutMargin < sunKeepoutMinMarginDeg) {
+          sunKeepoutMinMarginDeg = keepoutMargin;
+          sunKeepoutWorstTime = t;
+          sunKeepoutWorstEntry = activeLabel;
+        }
+        if (keepoutMargin < 0) sunViolationSamples += 1;
       }
     }
   });
@@ -675,9 +743,18 @@ function computeConstraints(
     earthViolationSamples,
     earthPhysicalIntersectionSamples,
     earthKeepoutMinMarginDeg,
-    sunMinAngleDeg,
-    sunWorstTime,
-    sunWorstEntry,
+    sunApplicableMinAngleDeg,
+    sunApplicableWorstTime,
+    sunApplicableWorstEntry,
+    sunKeepoutDeg,
+    sunKeepoutConfigured,
+    sunKeepoutDisabledInEclipse,
+    sunKeepoutUmbraOnly,
+    sunKeepoutSamples,
+    sunViolationSamples,
+    sunKeepoutMinMarginDeg,
+    sunKeepoutWorstTime,
+    sunKeepoutWorstEntry,
   };
 }
 
@@ -997,6 +1074,20 @@ function validationFindings(
         `${constraints.earthViolationSamples} samples below the configured keepout.`,
     });
   }
+  if (constraints.sunKeepoutConfigured && constraints.sunViolationSamples > 0) {
+    findings.push({
+      severity: "error",
+      label: "Sun keepout violation",
+      detail:
+        `Worst Sun keepout margin ${constraints.sunKeepoutMinMarginDeg?.toFixed(2)} deg against ` +
+        `${constraints.sunKeepoutDeg.toFixed(2)} deg schedule constraint ` +
+        `at ${
+          constraints.sunKeepoutWorstTime === null ? "unknown time" : fmtTime(constraints.sunKeepoutWorstTime)
+        }` +
+        `${constraints.sunKeepoutWorstEntry ? ` during ${constraints.sunKeepoutWorstEntry}` : ""}; ` +
+        `${constraints.sunViolationSamples} applicable samples below the configured keepout.`,
+    });
+  }
   if (attitudeConsistency.intervalsOverThreshold > 0) {
     findings.push({
       severity: "error",
@@ -1021,13 +1112,23 @@ export function buildPlanStats(data: VizData, options: PlanStatsOptions = {}): P
   const attitudeThresholdDeg = finiteNumber(options.attitudeThresholdDeg) ? options.attitudeThresholdDeg : 0.5;
   const rollThresholdDeg = finiteNumber(options.rollThresholdDeg) ? options.rollThresholdDeg : 1.0;
   const earthKeepout = configuredEarthLimbMinAngleDeg(data, options);
+  const sunKeepout = configuredSunKeepout(data);
   const entries = sortedValidEntries(data.ppst);
   const activities = computeActivitySummaries(data.ppst);
   const gaps = computeGaps(entries, start, end);
   const slews = computeSlewSummaries(data.ppst);
   const stations = computeStationSummaries(data.ppst, downlinkRateMBps);
   const eclipseSegments = computeEclipseSegments(data, start, end);
-  const constraints = computeConstraints(data, entries, earthKeepout.value, earthKeepout.configured);
+  const constraints = computeConstraints(
+    data,
+    entries,
+    earthKeepout.value,
+    earthKeepout.configured,
+    sunKeepout.value,
+    sunKeepout.configured,
+    sunKeepout.disabledInEclipse,
+    sunKeepout.umbraOnly,
+  );
   const attitudeConsistency = computeAttitudeConsistency(
     data,
     entries,

@@ -213,6 +213,17 @@ function renderTimeBars(stats: PlanStats): void {
 function renderConstraints(stats: PlanStats): void {
   const c = stats.constraints;
   const keepoutSource = c.earthKeepoutConfigured ? "schedule constraint" : "physical limb only; schedule limit unavailable";
+  const sunKeepoutSource = c.sunKeepoutConfigured
+    ? `${c.sunKeepoutDeg.toFixed(2)}° schedule constraint`
+    : "schedule Sun keepout unavailable";
+  const eclipseGate = c.sunKeepoutDisabledInEclipse
+    ? `; ${c.sunKeepoutUmbraOnly === true ? "umbra" : "eclipse"} samples excluded`
+    : "";
+  const sunWorstDetail =
+    c.sunApplicableWorstTime === null
+      ? "no applicable sun vector samples"
+      : `${formatDegrees(c.sunApplicableMinAngleDeg)} minimum applicable Sun angle at ` +
+        `${fmtTime(c.sunApplicableWorstTime)}${c.sunApplicableWorstEntry ? `, ${c.sunApplicableWorstEntry}` : ""}`;
   mustEl<HTMLElement>("constraint-summary").replaceChildren(
     metric(
       c.earthKeepoutConfigured ? "Earth Keepout Margin" : "Earth Limb Clearance",
@@ -227,11 +238,16 @@ function renderConstraints(stats: PlanStats): void {
       `${c.samples} science collection samples checked against ${c.earthKeepoutDeg.toFixed(2)}° ${keepoutSource}`,
     ),
     metric(
-      "Minimum Sun Angle",
-      formatDegrees(c.sunMinAngleDeg),
-      c.sunWorstTime === null
-        ? "no sun vector samples"
-        : `${fmtTime(c.sunWorstTime)}${c.sunWorstEntry ? `, ${c.sunWorstEntry}` : ""}`,
+      c.sunKeepoutConfigured ? "Sun Keepout Margin" : "Sun Keepout",
+      c.sunKeepoutConfigured ? formatDegrees(c.sunKeepoutMinMarginDeg) : "—",
+      c.sunKeepoutConfigured
+        ? `${sunKeepoutSource}${eclipseGate}; ${sunWorstDetail}`
+        : sunKeepoutSource,
+    ),
+    metric(
+      c.sunKeepoutConfigured ? "Sun Keepout Violations" : "Sun Keepout Samples",
+      c.sunKeepoutConfigured ? String(c.sunViolationSamples) : "—",
+      `${c.sunKeepoutSamples} applicable science samples checked`,
     ),
   );
 }

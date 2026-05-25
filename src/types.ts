@@ -76,6 +76,9 @@ export interface VizMeta {
   };
   constraints?: {
     earth_limb_min_angle_deg?: number;
+    sun_min_angle_deg?: number;
+    sun_constraint_disabled_in_eclipse?: boolean;
+    sun_constraint_eclipse_umbra_only?: boolean;
   };
 }
 

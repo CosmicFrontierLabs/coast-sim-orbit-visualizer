@@ -132,6 +132,68 @@ def _get_field(obj: object, names: tuple[str, ...]) -> object | None:
     return None
 
 
+def _constraint_type(obj: object) -> str | None:
+    raw_type = _get_field(obj, ("type",))
+    return str(raw_type).lower() if raw_type is not None else None
+
+
+def _iter_constraint_tree(obj: object) -> list[object]:
+    if obj is None:
+        return []
+
+    nodes = [obj]
+    children = _get_field(obj, ("constraints",))
+    if isinstance(children, Mapping):
+        for child in children.values():
+            nodes.extend(_iter_constraint_tree(child))
+    elif isinstance(children, (list, tuple)):
+        for child in children:
+            nodes.extend(_iter_constraint_tree(child))
+
+    child = _get_field(obj, ("constraint",))
+    if child is not None:
+        nodes.extend(_iter_constraint_tree(child))
+
+    return nodes
+
+
+def _extract_sun_constraint_config(constraint: object) -> dict | None:
+    sun_constraint = _get_field(constraint, ("sun_constraint",))
+    if sun_constraint is None:
+        return None
+
+    nodes = _iter_constraint_tree(sun_constraint)
+    sun_min_angle = None
+    disabled_in_eclipse = False
+    eclipse_umbra_only = None
+
+    for node in nodes:
+        node_type = _constraint_type(node)
+        if node_type == "sun" and sun_min_angle is None:
+            min_angle = _get_field(node, ("min_angle", "min_angle_deg"))
+            if min_angle is not None:
+                sun_min_angle = min_angle
+        if node_type == "not":
+            child = _get_field(node, ("constraint",))
+            if _constraint_type(child) == "eclipse":
+                disabled_in_eclipse = True
+                eclipse_umbra_only = _get_field(child, ("umbra_only",))
+
+    if sun_min_angle is None:
+        return None
+
+    try:
+        out = {"sun_min_angle_deg": float(sun_min_angle)}
+    except (TypeError, ValueError):
+        return None
+
+    if disabled_in_eclipse:
+        out["sun_constraint_disabled_in_eclipse"] = True
+    if eclipse_umbra_only is not None:
+        out["sun_constraint_eclipse_umbra_only"] = bool(eclipse_umbra_only)
+    return out
+
+
 def _extract_solar_panel_config(ditl: "DITL") -> dict | None:
     """Extract canonical panel config from DITL config when available."""
     cfg = getattr(ditl, "config", None)
@@ -214,10 +276,17 @@ def _extract_constraint_config(ditl: "DITL") -> dict | None:
     """Extract schedule constraint values needed by frontend plan checks."""
     cfg = getattr(ditl, "config", None)
     constraint = _get_field(cfg, ("constraint", "constraints"))
+    if constraint is None:
+        return None
+
     earth_constraint = _get_field(constraint, ("earth_constraint", "earth_limb_constraint"))
     earth_min_angle = _get_field(earth_constraint, ("min_angle", "min_angle_deg"))
 
     out: dict = {}
+    sun_cfg = _extract_sun_constraint_config(constraint)
+    if sun_cfg is not None:
+        out.update(sun_cfg)
+
     if earth_min_angle is not None:
         try:
             out["earth_limb_min_angle_deg"] = float(earth_min_angle)

@@ -3,6 +3,7 @@ import unittest
 
 from orbit_visualizer.serializer import (
     _extract_attitude_arrays,
+    _extract_constraint_config,
     _extract_solar_panel_config,
     _serialize_plan_entry_for_viz,
 )
@@ -26,6 +27,38 @@ class SerializerTests(unittest.TestCase):
         self.assertEqual(
             _extract_solar_panel_config(ditl),
             {"gimbled": False, "direction_sc": [0.0, 0.0, -1.0]},
+        )
+
+    def test_extracts_sun_keepout_with_eclipse_gate(self) -> None:
+        ditl = SimpleNamespace(
+            config=SimpleNamespace(
+                constraint=SimpleNamespace(
+                    earth_constraint=SimpleNamespace(min_angle=20.0),
+                    sun_constraint=SimpleNamespace(
+                        type="and",
+                        constraints=[
+                            SimpleNamespace(type="sun", min_angle=80.0),
+                            SimpleNamespace(
+                                type="not",
+                                constraint=SimpleNamespace(
+                                    type="eclipse",
+                                    umbra_only=True,
+                                ),
+                            ),
+                        ],
+                    ),
+                ),
+            ),
+        )
+
+        self.assertEqual(
+            _extract_constraint_config(ditl),
+            {
+                "earth_limb_min_angle_deg": 20.0,
+                "sun_min_angle_deg": 80.0,
+                "sun_constraint_disabled_in_eclipse": True,
+                "sun_constraint_eclipse_umbra_only": True,
+            },
         )
 
     def test_roll_wrap_preserves_body_roll_without_180_degree_offset(self) -> None:
