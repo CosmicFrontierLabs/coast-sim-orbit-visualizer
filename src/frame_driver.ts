@@ -12,6 +12,7 @@ import { stepSimTime } from "./simulation_step";
 import { applySpacecraftState } from "./spacecraft_state";
 import { applyCameraMode } from "./camera_mode_driver";
 import { resetCameraToSc } from "./camera_utils";
+import type { GroundStationMarkerController } from "./ground_station_markers";
 import type { BasisRTB, CameraViewMode, FrameState, PPSTEntry, SlewWindow, VizData } from "./types";
 
 interface RunVizFrameDeps {
@@ -72,6 +73,7 @@ interface RunVizFrameDeps {
   };
   updateScrubber: () => void;
   scMarker: { update: (posW: THREE.Vector3, viewMode: CameraViewMode) => void };
+  groundStationMarkers: GroundStationMarkerController;
 }
 
 /**
@@ -128,6 +130,7 @@ export function runVizFrame({
   hud,
   updateScrubber,
   scMarker,
+  groundStationMarkers,
 }: RunVizFrameDeps): FrameState {
   const stepped = stepSimTime({
     simTime,
@@ -142,12 +145,13 @@ export function runVizFrame({
   simTime = stepped.simTime;
   prevTs = stepped.prevTs;
 
-  const { posW, sunVec, ramVec, lat, lon, beta, inEcl, alt, ra, dec, roll } = sampleEphemFrame({
-    ephem: data.ephem,
-    simTime,
-    reKm,
-    scale,
-  });
+  const { posW, sunVec, ramVec, lat, lon, beta, inEcl, alt, ra, dec, roll, attitudeQ } =
+    sampleEphemFrame({
+      ephem: data.ephem,
+      simTime,
+      reKm,
+      scale,
+    });
 
   updateEarthAndCloudOrientation({
     simTime,
@@ -178,7 +182,8 @@ export function runVizFrame({
     ra,
     dec,
     roll,
-    hasAttitude: !!(data.ephem.ra && data.ephem.ra.length > 0),
+    attitudeQ,
+    hasAttitude: !!(attitudeQ || (data.ephem.ra && data.ephem.ra.length > 0)),
     posW,
     ramVec,
     sunVec,
@@ -249,6 +254,7 @@ export function runVizFrame({
   });
 
   scMarker.update(posW, cameraViewMode);
+  groundStationMarkers.update(simTime, data.ppst);
 
   if (orbitCtl.enabled) {
     orbitCtl.update();

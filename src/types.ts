@@ -22,6 +22,11 @@ export interface EphemData {
   ra?: number[];
   dec?: number[];
   roll?: number[];
+  // COAST attitude quaternion, scalar-first, ECI-to-body.
+  quat_w?: number[];
+  quat_x?: number[];
+  quat_y?: number[];
+  quat_z?: number[];
 }
 
 export interface PPSTEntry {
@@ -33,10 +38,24 @@ export interface PPSTEntry {
   name: string;
   obstype?: string;
   station?: string;
+  slewtime?: number;
+  slewdist?: number;
+  exposure?: number;
+  contact_begin?: number;
+  contact_end?: number;
   track_start_ra?: number;
   track_start_dec?: number;
   track_end_ra?: number;
   track_end_dec?: number;
+}
+
+export interface GroundStationMeta {
+  code: string;
+  name?: string;
+  latitude_deg: number;
+  longitude_deg: number;
+  elevation_m?: number;
+  min_elevation_deg?: number;
 }
 
 export interface SlewTrackPoint {
@@ -58,10 +77,24 @@ export interface VizMeta {
   n_ephem: number;
   n_ppst: number;
   n_slews?: number;
+  mission?: string;
+  source_plan?: string;
+  tle?: string;
+  coast_sim_head?: string;
+  coast_sim_branch?: string;
+  begin_utc?: string;
+  end_utc?: string;
   solar_panel?: {
     gimbled?: boolean;
     direction_sc?: EciVec;
   };
+  constraints?: {
+    earth_limb_min_angle_deg?: number;
+    sun_min_angle_deg?: number;
+    sun_constraint_disabled_in_eclipse?: boolean;
+    sun_constraint_eclipse_umbra_only?: boolean;
+  };
+  ground_stations?: GroundStationMeta[];
 }
 
 export interface VizData {
@@ -69,6 +102,36 @@ export interface VizData {
   ephem: EphemData;
   ppst: PPSTEntry[];
   slews?: SlewWindow[];
+}
+
+export type TimelineSegmentKind = "entry" | "gsp" | "gap" | "slew";
+export type TimelineSegmentLane = "activity" | "slew" | "gap";
+export type TimelineGapBoundary = "leading" | "between" | "trailing";
+
+export interface TimelineSegment {
+  id: string;
+  kind: TimelineSegmentKind;
+  lane: TimelineSegmentLane;
+  start: number;
+  end: number;
+  focusTime: number;
+  label: string;
+  title: string;
+  gapBoundary?: TimelineGapBoundary;
+  entryIndex?: number;
+  prevEntryIndex?: number;
+  nextEntryIndex?: number;
+  slewIndex?: number;
+  entry?: PPSTEntry;
+  slew?: SlewWindow;
+}
+
+export interface TimelineSelection {
+  id: string;
+  kind: TimelineSegmentKind;
+  start: number;
+  end: number;
+  focusTime: number;
 }
 
 export interface BasisRTB {
