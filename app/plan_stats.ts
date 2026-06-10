@@ -212,6 +212,7 @@ function renderTimeBars(stats: PlanStats): void {
 
 function renderConstraints(stats: PlanStats): void {
   const c = stats.constraints;
+  const telemetry = stats.constraintTelemetry;
   const keepoutSource = c.earthKeepoutConfigured ? "schedule constraint" : "physical limb only; schedule limit unavailable";
   const sunKeepoutSource = c.sunKeepoutConfigured
     ? `${c.sunKeepoutDeg.toFixed(2)}° schedule constraint`
@@ -248,6 +249,20 @@ function renderConstraints(stats: PlanStats): void {
       c.sunKeepoutConfigured ? "Sun Keepout Violations" : "Sun Keepout Samples",
       c.sunKeepoutConfigured ? String(c.sunViolationSamples) : "—",
       `${c.sunKeepoutSamples} applicable science samples checked`,
+    ),
+    metric(
+      "Executed Hard Violations",
+      telemetry.available ? String(telemetry.hardViolationSamples) : "—",
+      telemetry.available
+        ? `${telemetry.samples} ephemeris samples checked from COAST housekeeping`
+        : "constraint telemetry unavailable in viz-data",
+    ),
+    metric(
+      "Executed Soft Violations",
+      telemetry.available ? String(telemetry.softViolationSamples) : "—",
+      telemetry.available
+        ? `${telemetry.violations.length} violation type${telemetry.violations.length === 1 ? "" : "s"} reported`
+        : "constraint telemetry unavailable in viz-data",
     ),
   );
 }
@@ -712,6 +727,9 @@ function statsCsv(stats: PlanStats): string {
           ["earth_keepout_violation_samples", stats.constraints.earthViolationSamples],
           ["earth_limb_clearance_min_deg", stats.constraints.earthMinMarginDeg],
           ["earth_physical_intersection_samples", stats.constraints.earthPhysicalIntersectionSamples],
+          ["executed_constraint_samples", stats.constraintTelemetry.samples],
+          ["executed_hard_constraint_violation_samples", stats.constraintTelemetry.hardViolationSamples],
+          ["executed_soft_constraint_violation_samples", stats.constraintTelemetry.softViolationSamples],
           ["charge_sec", stats.totals.chargeSec],
           ["downlink_MB", stats.totals.downlinkMB],
         ],
@@ -743,6 +761,23 @@ function statsCsv(stats: PlanStats): string {
       csvRows(
         ["target", "type", "start", "duration_sec", "distance_deg"],
         stats.slews.map((row) => [row.target, row.type, fmtTime(row.start), row.durationSec, row.distanceDeg]),
+      ),
+    ],
+    [
+      "constraint_violations",
+      csvRows(
+        ["kind", "constraint", "samples", "first", "last", "modes", "first_entry", "last_entry", "detail"],
+        stats.constraintTelemetry.violations.map((row) => [
+          row.kind,
+          row.constraint,
+          row.samples,
+          fmtTime(row.firstTime),
+          fmtTime(row.lastTime),
+          row.modes.join("; "),
+          row.firstEntry,
+          row.lastEntry,
+          row.detail,
+        ]),
       ),
     ],
     [

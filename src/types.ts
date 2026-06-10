@@ -27,6 +27,18 @@ export interface EphemData {
   quat_x?: number[];
   quat_y?: number[];
   quat_z?: number[];
+  // Optional COAST housekeeping constraint telemetry.
+  acs_mode?: Array<string | number | null>;
+  obsid?: Array<number | null>;
+  in_constraint?: Array<string | null>;
+  star_tracker_hard_violations?: Array<number | null>;
+  star_tracker_soft_violations?: Array<boolean | null>;
+  star_tracker_functional_count?: Array<number | null>;
+  star_tracker_status?: Array<boolean[] | null>;
+  radiator_hard_violations?: Array<number | null>;
+  sun_angle_deg?: Array<number | null>;
+  earth_angle_deg?: Array<number | null>;
+  moon_angle_deg?: Array<number | null>;
 }
 
 export interface PPSTEntry {

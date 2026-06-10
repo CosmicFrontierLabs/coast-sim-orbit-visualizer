@@ -296,6 +296,47 @@ def _extract_constraint_config(ditl: "DITL") -> dict | None:
     return out or None
 
 
+def _enum_name(value: object) -> object:
+    name = getattr(value, "name", None)
+    if isinstance(name, str):
+        return name
+    return value
+
+
+def _extract_housekeeping_field(
+    ditl: "DITL", field_name: str, target_times: list[float]
+) -> list[object] | None:
+    """Interpolate/copy a housekeeping field onto ephemeris timestamps.
+
+    The DITL housekeeping cadence currently matches the ephemeris cadence for
+    generated plans.  The timestamp lookup keeps the export robust if a record
+    is absent, while preserving nonnumeric values such as constraint names.
+    """
+
+    hk_list = getattr(getattr(ditl, "telemetry", None), "housekeeping", None)
+    if not hk_list:
+        return None
+
+    by_time: dict[float, object] = {}
+    for hk in hk_list:
+        timestamp = _get_field(hk, ("timestamp",))
+        if timestamp is None:
+            continue
+        if hasattr(timestamp, "timestamp"):
+            timestamp_value = float(timestamp.timestamp())  # type: ignore[union-attr]
+        else:
+            try:
+                timestamp_value = float(timestamp)
+            except (TypeError, ValueError):
+                continue
+        by_time[timestamp_value] = _enum_name(_get_field(hk, (field_name,)))
+
+    if not by_time:
+        return None
+
+    return [by_time.get(float(t)) for t in target_times]
+
+
 def _extract_ground_station_config(
     ditl: "DITL", station_codes: set[str] | None = None
 ) -> list[dict] | None:
@@ -486,6 +527,23 @@ def ditl_to_viz_payload(ditl: "DITL") -> dict:
         ephem["quat_z"] = quat_z
     except Exception:
         pass  # Frontend falls back to RA/Dec/Roll attitude.
+
+    for field_name in (
+        "acs_mode",
+        "obsid",
+        "in_constraint",
+        "star_tracker_hard_violations",
+        "star_tracker_soft_violations",
+        "star_tracker_functional_count",
+        "star_tracker_status",
+        "radiator_hard_violations",
+        "sun_angle_deg",
+        "earth_angle_deg",
+        "moon_angle_deg",
+    ):
+        telemetry_values = _extract_housekeeping_field(ditl, field_name, timestamps)
+        if telemetry_values is not None:
+            ephem[field_name] = telemetry_values
 
     ppst = _serialize_ppst_for_viz(ditl)
     solar_panel_cfg = _extract_solar_panel_config(ditl)

@@ -92,6 +92,26 @@ export interface ConstraintSummary {
   sunKeepoutWorstEntry: string | null;
 }
 
+export interface ConstraintViolationSummary {
+  kind: "hard" | "soft";
+  constraint: string;
+  samples: number;
+  firstTime: number;
+  lastTime: number;
+  firstEntry: string | null;
+  lastEntry: string | null;
+  modes: string[];
+  detail?: string;
+}
+
+export interface ConstraintTelemetrySummary {
+  available: boolean;
+  samples: number;
+  hardViolationSamples: number;
+  softViolationSamples: number;
+  violations: ConstraintViolationSummary[];
+}
+
 export interface AttitudeConsistencySummary {
   checkedIntervals: number;
   thresholdDeg: number;
@@ -186,6 +206,7 @@ export interface PlanStats {
   };
   downlinkRateMBps: number | null;
   constraints: ConstraintSummary;
+  constraintTelemetry: ConstraintTelemetrySummary;
   attitudeConsistency: AttitudeConsistencySummary;
   gspExecution: GspExecutionSummary;
   orbitContext: OrbitContextSummary;
@@ -758,6 +779,251 @@ function computeConstraints(
   };
 }
 
+function cleanTelemetryString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const cleaned = value.trim();
+  if (!cleaned || cleaned.toLowerCase() === "none" || cleaned.toLowerCase() === "null") return null;
+  return cleaned;
+}
+
+function displayConstraintName(value: string): string {
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .map((word) => {
+      const upper = word.toUpperCase();
+      if (upper === "ST") return "Star tracker";
+      if (upper === "ACS") return "ACS";
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(" ");
+}
+
+function classifyConstraintName(value: string): {
+  key: string;
+  kind: "hard" | "soft";
+  constraint: string;
+  detail?: string;
+} {
+  const normalized = value.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  if (normalized.includes("st soft") || normalized.includes("star tracker soft")) {
+    return {
+      key: "soft:star-tracker",
+      kind: "soft",
+      constraint: "Star tracker soft",
+      detail: `reported by COAST in_constraint: ${value}`,
+    };
+  }
+  if (normalized.includes("st hard") || normalized.includes("star tracker hard")) {
+    return {
+      key: "hard:star-tracker",
+      kind: "hard",
+      constraint: "Star tracker hard",
+      detail: `reported by COAST in_constraint: ${value}`,
+    };
+  }
+  if (normalized.includes("radiator") && normalized.includes("hard")) {
+    return {
+      key: "hard:radiator",
+      kind: "hard",
+      constraint: "Radiator hard",
+      detail: `reported by COAST in_constraint: ${value}`,
+    };
+  }
+  const kind = normalized.includes("soft") ? "soft" : "hard";
+  return {
+    key: `${kind}:${normalized || value}`,
+    kind,
+    constraint: displayConstraintName(value),
+    detail: `reported by COAST in_constraint: ${value}`,
+  };
+}
+
+function starTrackerDetail(data: VizData, index: number, prefix: string): string {
+  const status = data.ephem.star_tracker_status?.[index];
+  const functional = data.ephem.star_tracker_functional_count?.[index];
+  const parts = [prefix];
+  if (finiteNumber(functional) && Array.isArray(status)) {
+    parts.push(`${functional}/${status.length} trackers functional`);
+  } else if (finiteNumber(functional)) {
+    parts.push(`${functional} trackers functional`);
+  }
+  if (Array.isArray(status)) {
+    const blocked = status
+      .map((ok, i) => (ok ? null : `tracker ${i + 1}`))
+      .filter((value): value is string => value !== null);
+    if (blocked.length > 0) parts.push(`blocked: ${blocked.join(", ")}`);
+  }
+  return parts.join("; ");
+}
+
+interface PendingConstraintViolation {
+  kind: "hard" | "soft";
+  constraint: string;
+  samples: number;
+  firstTime: number;
+  lastTime: number;
+  firstEntry: string | null;
+  lastEntry: string | null;
+  modes: Set<string>;
+  detail?: string;
+}
+
+function recordConstraintViolation(
+  rows: Map<string, PendingConstraintViolation>,
+  event: {
+    key: string;
+    kind: "hard" | "soft";
+    constraint: string;
+    detail?: string;
+  },
+  time: number,
+  entry: string | null,
+  mode: string | null,
+): void {
+  const existing = rows.get(event.key);
+  if (!existing) {
+    rows.set(event.key, {
+      kind: event.kind,
+      constraint: event.constraint,
+      samples: 1,
+      firstTime: time,
+      lastTime: time,
+      firstEntry: entry,
+      lastEntry: entry,
+      modes: mode ? new Set([mode]) : new Set(),
+      detail: event.detail,
+    });
+    return;
+  }
+  existing.samples += 1;
+  existing.lastTime = time;
+  existing.lastEntry = entry;
+  if (mode) existing.modes.add(mode);
+  if (event.detail) existing.detail = event.detail;
+}
+
+function computeConstraintTelemetry(data: VizData, entries: WindowRef[]): ConstraintTelemetrySummary {
+  const ephem = data.ephem;
+  const available =
+    Array.isArray(ephem.in_constraint) ||
+    Array.isArray(ephem.star_tracker_hard_violations) ||
+    Array.isArray(ephem.star_tracker_soft_violations) ||
+    Array.isArray(ephem.radiator_hard_violations);
+
+  if (!available) {
+    return {
+      available: false,
+      samples: 0,
+      hardViolationSamples: 0,
+      softViolationSamples: 0,
+      violations: [],
+    };
+  }
+
+  const rows = new Map<string, PendingConstraintViolation>();
+  let hardViolationSamples = 0;
+  let softViolationSamples = 0;
+
+  ephem.utime.forEach((time, index) => {
+    const events = new Map<
+      string,
+      {
+        key: string;
+        kind: "hard" | "soft";
+        constraint: string;
+        detail?: string;
+      }
+    >();
+    const add = (event: {
+      key: string;
+      kind: "hard" | "soft";
+      constraint: string;
+      detail?: string;
+    }) => {
+      if (!events.has(event.key)) events.set(event.key, event);
+    };
+
+    const starTrackerHard = ephem.star_tracker_hard_violations?.[index];
+    if (finiteNumber(starTrackerHard) && starTrackerHard > 0) {
+      add({
+        key: "hard:star-tracker",
+        kind: "hard",
+        constraint: "Star tracker hard",
+        detail: starTrackerDetail(
+          data,
+          index,
+          `${starTrackerHard} hard tracker violation${starTrackerHard === 1 ? "" : "s"}`,
+        ),
+      });
+    }
+
+    if (ephem.star_tracker_soft_violations?.[index] === true) {
+      add({
+        key: "soft:star-tracker",
+        kind: "soft",
+        constraint: "Star tracker soft",
+        detail: starTrackerDetail(data, index, "soft tracker constraint violated"),
+      });
+    }
+
+    const radiatorHard = ephem.radiator_hard_violations?.[index];
+    if (finiteNumber(radiatorHard) && radiatorHard > 0) {
+      add({
+        key: "hard:radiator",
+        kind: "hard",
+        constraint: "Radiator hard",
+        detail: `${radiatorHard} radiator hard violation${radiatorHard === 1 ? "" : "s"}`,
+      });
+    }
+
+    const reportedConstraint = cleanTelemetryString(ephem.in_constraint?.[index]);
+    if (reportedConstraint) add(classifyConstraintName(reportedConstraint));
+
+    if (events.size === 0) return;
+
+    const entry = entryAtTime(entries, time);
+    const entryName = entry ? entryLabel(entry.entry) : null;
+    const mode = cleanTelemetryString(ephem.acs_mode?.[index]) ?? (entry ? entryType(entry.entry) : null);
+    let hardSample = false;
+    let softSample = false;
+    events.forEach((event) => {
+      if (event.kind === "hard") hardSample = true;
+      if (event.kind === "soft") softSample = true;
+      recordConstraintViolation(rows, event, time, entryName, mode);
+    });
+    if (hardSample) hardViolationSamples += 1;
+    if (softSample) softViolationSamples += 1;
+  });
+
+  const violations = [...rows.values()]
+    .map((row) => ({
+      kind: row.kind,
+      constraint: row.constraint,
+      samples: row.samples,
+      firstTime: row.firstTime,
+      lastTime: row.lastTime,
+      firstEntry: row.firstEntry,
+      lastEntry: row.lastEntry,
+      modes: [...row.modes].sort(),
+      detail: row.detail,
+    }))
+    .sort((a, b) => {
+      if (a.kind !== b.kind) return a.kind === "hard" ? -1 : 1;
+      return b.samples - a.samples || a.constraint.localeCompare(b.constraint);
+    });
+
+  return {
+    available: true,
+    samples: ephem.utime.length,
+    hardViolationSamples,
+    softViolationSamples,
+    violations,
+  };
+}
+
 function expectedScienceTargetAt(entry: PPSTEntry): { ra: number; dec: number; roll: number | null } | null {
   if (!finiteNumber(entry.ra) || !finiteNumber(entry.dec)) return null;
   return {
@@ -1033,6 +1299,17 @@ function computeFindings(data: VizData, entries: WindowRef[], start: number, end
     "ra",
     "dec",
     "roll",
+    "acs_mode",
+    "obsid",
+    "in_constraint",
+    "star_tracker_hard_violations",
+    "star_tracker_soft_violations",
+    "star_tracker_functional_count",
+    "star_tracker_status",
+    "radiator_hard_violations",
+    "sun_angle_deg",
+    "earth_angle_deg",
+    "moon_angle_deg",
   ];
   sampledFields.forEach((field) => {
     const value = data.ephem[field];
@@ -1058,9 +1335,47 @@ function computeFindings(data: VizData, entries: WindowRef[], start: number, end
 
 function validationFindings(
   constraints: ConstraintSummary,
+  constraintTelemetry: ConstraintTelemetrySummary,
   attitudeConsistency: AttitudeConsistencySummary,
 ): IntegrityFinding[] {
   const findings: IntegrityFinding[] = [];
+  if (!constraintTelemetry.available) {
+    findings.push({
+      severity: "warn",
+      label: "No executed constraint telemetry",
+      detail: "Hard and soft COAST constraint telemetry is not present in this viz-data payload.",
+    });
+  }
+  if (constraintTelemetry.hardViolationSamples > 0) {
+    const top = constraintTelemetry.violations
+      .filter((violation) => violation.kind === "hard")
+      .slice(0, 3)
+      .map((violation) => `${violation.constraint}: ${violation.samples}`)
+      .join("; ");
+    findings.push({
+      severity: "error",
+      label: "Executed hard constraint violation",
+      detail:
+        `${constraintTelemetry.hardViolationSamples} ephemeris sample` +
+        `${constraintTelemetry.hardViolationSamples === 1 ? "" : "s"} reported a hard constraint violation` +
+        `${top ? ` (${top})` : ""}.`,
+    });
+  }
+  if (constraintTelemetry.softViolationSamples > 0) {
+    const top = constraintTelemetry.violations
+      .filter((violation) => violation.kind === "soft")
+      .slice(0, 3)
+      .map((violation) => `${violation.constraint}: ${violation.samples}`)
+      .join("; ");
+    findings.push({
+      severity: "warn",
+      label: "Executed soft constraint violation",
+      detail:
+        `${constraintTelemetry.softViolationSamples} ephemeris sample` +
+        `${constraintTelemetry.softViolationSamples === 1 ? "" : "s"} reported a soft constraint violation` +
+        `${top ? ` (${top})` : ""}.`,
+    });
+  }
   if (constraints.earthKeepoutConfigured && constraints.earthViolationSamples > 0) {
     findings.push({
       severity: "error",
@@ -1129,6 +1444,7 @@ export function buildPlanStats(data: VizData, options: PlanStatsOptions = {}): P
     sunKeepout.disabledInEclipse,
     sunKeepout.umbraOnly,
   );
+  const constraintTelemetry = computeConstraintTelemetry(data, entries);
   const attitudeConsistency = computeAttitudeConsistency(
     data,
     entries,
@@ -1183,6 +1499,7 @@ export function buildPlanStats(data: VizData, options: PlanStatsOptions = {}): P
     },
     downlinkRateMBps,
     constraints,
+    constraintTelemetry,
     attitudeConsistency,
     gspExecution,
     orbitContext: computeOrbitContext(data, eclipseSegments),
@@ -1195,7 +1512,7 @@ export function buildPlanStats(data: VizData, options: PlanStatsOptions = {}): P
     gaps,
     slews,
     findings: [
-      ...validationFindings(constraints, attitudeConsistency),
+      ...validationFindings(constraints, constraintTelemetry, attitudeConsistency),
       ...computeFindings(data, entries, start, end),
     ],
   };

@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+from enum import Enum
 from types import SimpleNamespace
 import unittest
 
@@ -6,6 +8,7 @@ from orbit_visualizer.serializer import (
     _extract_attitude_quaternion_arrays,
     _extract_constraint_config,
     _extract_ground_station_config,
+    _extract_housekeeping_field,
     _gsp_station_codes,
     _extract_solar_panel_config,
     _serialize_plan_entry_for_viz,
@@ -13,6 +16,45 @@ from orbit_visualizer.serializer import (
 
 
 class SerializerTests(unittest.TestCase):
+    def test_extracts_housekeeping_constraint_fields_on_target_times(self) -> None:
+        class Mode(Enum):
+            SCIENCE = 0
+            SLEWING = 1
+
+        ditl = SimpleNamespace(
+            telemetry=SimpleNamespace(
+                housekeeping=[
+                    SimpleNamespace(
+                        timestamp=datetime.fromtimestamp(10, tz=timezone.utc),
+                        acs_mode=Mode.SCIENCE,
+                        in_constraint=None,
+                        star_tracker_hard_violations=0,
+                    ),
+                    SimpleNamespace(
+                        timestamp=datetime.fromtimestamp(20, tz=timezone.utc),
+                        acs_mode=Mode.SLEWING,
+                        in_constraint="Earth Limb",
+                        star_tracker_hard_violations=2,
+                    ),
+                ],
+            ),
+        )
+
+        self.assertEqual(
+            _extract_housekeeping_field(ditl, "acs_mode", [10.0, 20.0, 30.0]),
+            ["SCIENCE", "SLEWING", None],
+        )
+        self.assertEqual(
+            _extract_housekeeping_field(ditl, "in_constraint", [10.0, 20.0]),
+            [None, "Earth Limb"],
+        )
+        self.assertEqual(
+            _extract_housekeeping_field(
+                ditl, "star_tracker_hard_violations", [10.0, 20.0]
+            ),
+            [0, 2],
+        )
+
     def test_extracts_fixed_panel_from_solar_panel_set(self) -> None:
         ditl = SimpleNamespace(
             config=SimpleNamespace(
