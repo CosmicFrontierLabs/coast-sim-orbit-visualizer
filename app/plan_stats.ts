@@ -697,6 +697,17 @@ function renderFindings(stats: PlanStats): void {
   );
 }
 
+function positionChecksSection(stats: PlanStats): void {
+  const checks = mustEl<HTMLElement>("checks-section");
+  const anchor = mustEl<HTMLElement>("checks-anchor");
+  const header = mustEl<HTMLElement>("stats-header");
+  if (stats.findings.length > 0) {
+    header.after(checks);
+  } else {
+    anchor.after(checks);
+  }
+}
+
 function csvCell(value: unknown): string {
   const textValue = value === null || value === undefined ? "" : String(value);
   if (/[",\n]/.test(textValue)) return `"${textValue.replaceAll('"', '""')}"`;
@@ -816,6 +827,7 @@ function wireExportButtons(): void {
 }
 
 function render(stats: PlanStats): void {
+  positionChecksSection(stats);
   renderSummary(stats);
   renderConstraints(stats);
   renderAttitudeConsistency(stats);

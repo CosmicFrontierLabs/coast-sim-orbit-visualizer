@@ -1100,7 +1100,7 @@ function computeAttitudeConsistency(
     const type = entryType(ref.entry);
 
     data.ephem.utime.forEach((t, i) => {
-      if (t < checkWindow.begin || t > checkWindow.end) return;
+      if (t < checkWindow.begin || t >= checkWindow.end) return;
       if (!finiteNumber(ra[i]) || !finiteNumber(dec[i])) return;
       const expected = expectedScienceTargetAt(ref.entry);
       if (!expected) return;
@@ -1169,7 +1169,7 @@ function computeGspExecution(data: VizData, entries: WindowRef[]): GspExecutionS
 
     const sampleVectors = data.ephem.utime
       .map((t, i) => {
-        if (t < window.begin || t > window.end) return null;
+        if (t < window.begin || t >= window.end) return null;
         if (!finiteNumber(ra[i]) || !finiteNumber(dec[i])) return null;
         return radec2eci(ra[i], dec[i]);
       })
