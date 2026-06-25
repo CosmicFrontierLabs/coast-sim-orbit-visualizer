@@ -31,6 +31,8 @@ export interface EphemData {
   acs_mode?: Array<string | number | null>;
   obsid?: Array<number | null>;
   in_constraint?: Array<string | null>;
+  attitude_constraint?: Array<string | null>;
+  attitude_constraint_scope?: Array<string | null>;
   star_tracker_hard_violations?: Array<number | null>;
   star_tracker_soft_violations?: Array<boolean | null>;
   star_tracker_functional_count?: Array<number | null>;

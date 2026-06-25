@@ -28,12 +28,16 @@ class SerializerTests(unittest.TestCase):
                         timestamp=datetime.fromtimestamp(10, tz=timezone.utc),
                         acs_mode=Mode.SCIENCE,
                         in_constraint=None,
+                        attitude_constraint=None,
+                        attitude_constraint_scope=None,
                         star_tracker_hard_violations=0,
                     ),
                     SimpleNamespace(
                         timestamp=datetime.fromtimestamp(20, tz=timezone.utc),
                         acs_mode=Mode.SLEWING,
                         in_constraint="Earth Limb",
+                        attitude_constraint="Radiator Hard",
+                        attitude_constraint_scope="hardware_safety",
                         star_tracker_hard_violations=2,
                     ),
                 ],
@@ -47,6 +51,16 @@ class SerializerTests(unittest.TestCase):
         self.assertEqual(
             _extract_housekeeping_field(ditl, "in_constraint", [10.0, 20.0]),
             [None, "Earth Limb"],
+        )
+        self.assertEqual(
+            _extract_housekeeping_field(ditl, "attitude_constraint", [10.0, 20.0]),
+            [None, "Radiator Hard"],
+        )
+        self.assertEqual(
+            _extract_housekeeping_field(
+                ditl, "attitude_constraint_scope", [10.0, 20.0]
+            ),
+            [None, "hardware_safety"],
         )
         self.assertEqual(
             _extract_housekeeping_field(

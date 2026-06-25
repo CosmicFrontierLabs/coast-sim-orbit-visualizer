@@ -801,7 +801,10 @@ function displayConstraintName(value: string): string {
     .join(" ");
 }
 
-function classifyConstraintName(value: string): {
+function classifyConstraintName(
+  value: string,
+  sourceLabel = "COAST in_constraint",
+): {
   key: string;
   kind: "hard" | "soft";
   constraint: string;
@@ -813,7 +816,7 @@ function classifyConstraintName(value: string): {
       key: "soft:star-tracker",
       kind: "soft",
       constraint: "Star tracker soft",
-      detail: `reported by COAST in_constraint: ${value}`,
+      detail: `reported by ${sourceLabel}: ${value}`,
     };
   }
   if (normalized.includes("st hard") || normalized.includes("star tracker hard")) {
@@ -821,7 +824,7 @@ function classifyConstraintName(value: string): {
       key: "hard:star-tracker",
       kind: "hard",
       constraint: "Star tracker hard",
-      detail: `reported by COAST in_constraint: ${value}`,
+      detail: `reported by ${sourceLabel}: ${value}`,
     };
   }
   if (normalized.includes("radiator") && normalized.includes("hard")) {
@@ -829,7 +832,7 @@ function classifyConstraintName(value: string): {
       key: "hard:radiator",
       kind: "hard",
       constraint: "Radiator hard",
-      detail: `reported by COAST in_constraint: ${value}`,
+      detail: `reported by ${sourceLabel}: ${value}`,
     };
   }
   const kind = normalized.includes("soft") ? "soft" : "hard";
@@ -837,7 +840,7 @@ function classifyConstraintName(value: string): {
     key: `${kind}:${normalized || value}`,
     kind,
     constraint: displayConstraintName(value),
-    detail: `reported by COAST in_constraint: ${value}`,
+    detail: `reported by ${sourceLabel}: ${value}`,
   };
 }
 
@@ -907,7 +910,9 @@ function recordConstraintViolation(
 
 function computeConstraintTelemetry(data: VizData, entries: WindowRef[]): ConstraintTelemetrySummary {
   const ephem = data.ephem;
+  const hasActiveAttitudeTelemetry = Array.isArray(ephem.attitude_constraint);
   const available =
+    hasActiveAttitudeTelemetry ||
     Array.isArray(ephem.in_constraint) ||
     Array.isArray(ephem.star_tracker_hard_violations) ||
     Array.isArray(ephem.star_tracker_soft_violations) ||
@@ -979,8 +984,20 @@ function computeConstraintTelemetry(data: VizData, entries: WindowRef[]): Constr
       });
     }
 
-    const reportedConstraint = cleanTelemetryString(ephem.in_constraint?.[index]);
-    if (reportedConstraint) add(classifyConstraintName(reportedConstraint));
+    const reportedConstraint = cleanTelemetryString(
+      hasActiveAttitudeTelemetry ? ephem.attitude_constraint?.[index] : ephem.in_constraint?.[index],
+    );
+    if (reportedConstraint) {
+      const event = classifyConstraintName(
+        reportedConstraint,
+        hasActiveAttitudeTelemetry ? "COAST attitude_constraint" : "COAST in_constraint",
+      );
+      const scope = hasActiveAttitudeTelemetry
+        ? cleanTelemetryString(ephem.attitude_constraint_scope?.[index])
+        : null;
+      if (scope) event.detail = `${event.detail}; active scopes: ${scope}`;
+      add(event);
+    }
 
     if (events.size === 0) return;
 
@@ -1302,6 +1319,8 @@ function computeFindings(data: VizData, entries: WindowRef[], start: number, end
     "acs_mode",
     "obsid",
     "in_constraint",
+    "attitude_constraint",
+    "attitude_constraint_scope",
     "star_tracker_hard_violations",
     "star_tracker_soft_violations",
     "star_tracker_functional_count",
