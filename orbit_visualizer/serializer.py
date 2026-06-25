@@ -532,6 +532,8 @@ def ditl_to_viz_payload(ditl: "DITL") -> dict:
         "acs_mode",
         "obsid",
         "in_constraint",
+        "attitude_constraint",
+        "attitude_constraint_scope",
         "star_tracker_hard_violations",
         "star_tracker_soft_violations",
         "star_tracker_functional_count",
