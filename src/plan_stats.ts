@@ -951,39 +951,6 @@ function computeConstraintTelemetry(data: VizData, entries: WindowRef[]): Constr
       if (!events.has(event.key)) events.set(event.key, event);
     };
 
-    const starTrackerHard = ephem.star_tracker_hard_violations?.[index];
-    if (finiteNumber(starTrackerHard) && starTrackerHard > 0) {
-      add({
-        key: "hard:star-tracker",
-        kind: "hard",
-        constraint: "Star tracker hard",
-        detail: starTrackerDetail(
-          data,
-          index,
-          `${starTrackerHard} hard tracker violation${starTrackerHard === 1 ? "" : "s"}`,
-        ),
-      });
-    }
-
-    if (ephem.star_tracker_soft_violations?.[index] === true) {
-      add({
-        key: "soft:star-tracker",
-        kind: "soft",
-        constraint: "Star tracker soft",
-        detail: starTrackerDetail(data, index, "soft tracker constraint violated"),
-      });
-    }
-
-    const radiatorHard = ephem.radiator_hard_violations?.[index];
-    if (finiteNumber(radiatorHard) && radiatorHard > 0) {
-      add({
-        key: "hard:radiator",
-        kind: "hard",
-        constraint: "Radiator hard",
-        detail: `${radiatorHard} radiator hard violation${radiatorHard === 1 ? "" : "s"}`,
-      });
-    }
-
     const reportedConstraint = cleanTelemetryString(
       hasActiveAttitudeTelemetry ? ephem.attitude_constraint?.[index] : ephem.in_constraint?.[index],
     );
@@ -997,6 +964,41 @@ function computeConstraintTelemetry(data: VizData, entries: WindowRef[]): Constr
         : null;
       if (scope) event.detail = `${event.detail}; active scopes: ${scope}`;
       add(event);
+    }
+
+    if (!hasActiveAttitudeTelemetry) {
+      const starTrackerHard = ephem.star_tracker_hard_violations?.[index];
+      if (finiteNumber(starTrackerHard) && starTrackerHard > 0) {
+        add({
+          key: "hard:star-tracker",
+          kind: "hard",
+          constraint: "Star tracker hard",
+          detail: starTrackerDetail(
+            data,
+            index,
+            `${starTrackerHard} hard tracker violation${starTrackerHard === 1 ? "" : "s"}`,
+          ),
+        });
+      }
+
+      if (ephem.star_tracker_soft_violations?.[index] === true) {
+        add({
+          key: "soft:star-tracker",
+          kind: "soft",
+          constraint: "Star tracker soft",
+          detail: starTrackerDetail(data, index, "soft tracker constraint violated"),
+        });
+      }
+
+      const radiatorHard = ephem.radiator_hard_violations?.[index];
+      if (finiteNumber(radiatorHard) && radiatorHard > 0) {
+        add({
+          key: "hard:radiator",
+          kind: "hard",
+          constraint: "Radiator hard",
+          detail: `${radiatorHard} radiator hard violation${radiatorHard === 1 ? "" : "s"}`,
+        });
+      }
     }
 
     if (events.size === 0) return;
