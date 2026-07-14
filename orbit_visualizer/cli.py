@@ -3,15 +3,9 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
-
-def _load_json(path: Path) -> dict:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"Expected JSON object in {path}")
-    return payload
+from .sources import load_json_source
 
 
 def _existing_dir(path: str) -> Path:
@@ -27,13 +21,17 @@ def main() -> None:
     )
     parser.add_argument(
         "--viz-data",
-        type=Path,
-        help="Path to a saved VizData JSON file served at /viz-data.",
+        help=(
+            "Path or URI (file://, http://, https://) to a saved VizData JSON file "
+            "served at /viz-data."
+        ),
     )
     parser.add_argument(
         "--data",
-        type=Path,
-        help="Optional full DITL payload JSON file served by /data endpoints.",
+        help=(
+            "Optional path or URI (file://, http://, https://) to a full DITL payload "
+            "JSON file served by /data endpoints."
+        ),
     )
     parser.add_argument(
         "--model-dir",
@@ -55,9 +53,9 @@ def main() -> None:
     from . import main as app_module
 
     if args.data is not None:
-        app_module.set_data(_load_json(args.data))
+        app_module.set_data(load_json_source(args.data))
     if args.viz_data is not None:
-        app_module.set_viz_data(_load_json(args.viz_data))
+        app_module.set_viz_data(load_json_source(args.viz_data))
     if args.model_dir is not None:
         app_module.set_model_dir(args.model_dir)
 

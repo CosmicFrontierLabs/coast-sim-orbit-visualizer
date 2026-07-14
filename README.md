@@ -46,12 +46,22 @@ orbit-visualizer \
   --model-dir path/to/model
 ```
 
+`--viz-data` (and `--data`) accept a local path **or** a URI — `file://`,
+`http://`, or `https://` — so a payload published to object storage can be loaded
+directly. Public URLs need no credentials:
+
+```bash
+orbit-visualizer --viz-data https://bucket.example.com/plan/latest/viz_data.json
+```
+
 or with `uvicorn` directly:
 
 ```bash
 ORBIT_VISUALIZER_VIZ_DATA=path/to/viz_data.json \
 ORBIT_VISUALIZER_MODEL_DIR=path/to/model \
   uvicorn orbit_visualizer.main:app --host 127.0.0.1 --port 8000
+
+# ORBIT_VISUALIZER_VIZ_DATA and ORBIT_VISUALIZER_DATA also accept file://, http://, https:// URIs.
 ```
 
 ### Options
