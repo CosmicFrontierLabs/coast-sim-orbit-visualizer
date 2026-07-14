@@ -12,12 +12,18 @@ Can be used in two ways:
    Override the plan directory with the PLANS_DIR environment variable and
    the spacecraft model directory with ORBIT_VISUALIZER_MODEL_DIR.
 
+   ``ORBIT_VISUALIZER_VIZ_DATA`` and ``ORBIT_VISUALIZER_DATA`` accept a local
+   path or a URI (``file://``, ``http://``, ``https://``), so a payload published
+   to object storage can be loaded directly without downloading it first.
+
 Usage (file-based)::
     ORBIT_VISUALIZER_VIZ_DATA=output_viz/latest_viz_data.json \
       uvicorn orbit_visualizer.main:app --port 8000
+
+    ORBIT_VISUALIZER_VIZ_DATA=https://bucket.example.com/plan/latest/viz_data.json \
+      uvicorn orbit_visualizer.main:app --port 8000
 """
 
-import json
 import os
 from pathlib import Path
 
@@ -27,6 +33,8 @@ from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from conops.targets.plan_schema import PlanSchema
+
+from .sources import load_json_source
 
 app = FastAPI(
     title="Orbit Visualizer API",
@@ -98,17 +106,13 @@ def set_model_dir(path: str | Path) -> None:
 
 
 def _load_json_env(name: str) -> dict | None:
-    raw_path = os.environ.get(name)
-    if not raw_path:
+    source = os.environ.get(name)
+    if not source:
         return None
-    path = Path(raw_path)
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        return load_json_source(source)
     except Exception as exc:
-        raise RuntimeError(f"Failed to load {name}={path}: {exc}") from exc
-    if not isinstance(payload, dict):
-        raise RuntimeError(f"{name} must point to a JSON object: {path}")
-    return payload
+        raise RuntimeError(f"Failed to load {name}={source}: {exc}") from exc
 
 
 def load_startup_payloads() -> None:
