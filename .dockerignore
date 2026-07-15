@@ -1,0 +1,13 @@
+# Keep the build context small and reproducible. The frontend is built inside
+# the image (npm run build via setup.py), so host build artifacts and any
+# host-arch node_modules must not leak in.
+.git
+node_modules
+dist
+orbit_visualizer/dist
+.venv/
+*.egg-info/
+__pycache__/
+*.pyc
+model/*.glb
+model/spacecraft.config.json
