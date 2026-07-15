@@ -13,9 +13,15 @@
 #                  visualizer reads directly; then VIZ_DATA_URI may be omitted.)
 #
 # Spacecraft model (optional):
-#   MODEL_DIR      Local directory of spacecraft assets (spacecraft.glb and,
-#                  when needed, spacecraft.config.json), served at /model. Mount
-#                  it into the container. Passed to --model-dir when set.
+#   MODEL_BASE_URI Base URI that /model/* redirects to so the browser loads
+#                  spacecraft assets (spacecraft.glb, spacecraft.config.json)
+#                  directly from the shared bucket. Passed to --model-base-uri.
+#                  When unset and VIZ_DATA_URI is http(s), the same origin's
+#                  /model prefix is derived automatically — no host staging.
+#   MODEL_DIR      Local directory of spacecraft assets served at /model for
+#                  local/offline use. Mount it into the container. Passed to
+#                  --model-dir; takes precedence over the derived bucket (an
+#                  explicit MODEL_BASE_URI wins over both).
 #
 # Server overrides:
 #   ORBIT_VIS_HOST       bind host      (default 0.0.0.0)
@@ -38,6 +44,10 @@ fi
 
 if [[ -n "${MODEL_DIR:-}" ]]; then
   args+=(--model-dir "${MODEL_DIR}")
+fi
+
+if [[ -n "${MODEL_BASE_URI:-}" ]]; then
+  args+=(--model-base-uri "${MODEL_BASE_URI}")
 fi
 
 exec python -m orbit_visualizer.cli \

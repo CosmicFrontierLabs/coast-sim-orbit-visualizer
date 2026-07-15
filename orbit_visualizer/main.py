@@ -26,10 +26,11 @@ Usage (file-based)::
 
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from conops.targets.plan_schema import PlanSchema
@@ -78,6 +79,36 @@ _MODEL_DIR = (
 if not _MODEL_DIR_ENV and not _MODEL_DIR.is_dir() and _ALLOW_REPO_FALLBACK:
     _MODEL_DIR = _REPO_ROOT / "model"
 
+# Explicitly staged local model assets take precedence over the derived shared
+# bucket so local/offline development keeps working.
+_MODEL_DIR_EXPLICIT = bool(_MODEL_DIR_ENV)
+
+# Base URI under which spacecraft model assets live (e.g. the public shared
+# bucket). When resolved, /model/* redirects there so the browser fetches the
+# assets directly and updates propagate without restaging the container host.
+_MODEL_BASE_URI = os.environ.get("ORBIT_VISUALIZER_MODEL_BASE_URI", "").rstrip("/") or None
+
+# Derived from the viz-data source when it is an http(s) URI: the model is
+# published in the same shared bucket under /model.
+_DERIVED_MODEL_BASE_URI: str | None = None
+
+
+def derive_model_base_uri(source: str) -> str | None:
+    """Return the /model base on the same origin as an http(s) viz-data URI."""
+    parts = urlsplit(source)
+    if parts.scheme in ("http", "https") and parts.netloc:
+        return f"{parts.scheme}://{parts.netloc}/model"
+    return None
+
+
+def resolved_model_base_uri() -> str | None:
+    """Model base URI to redirect to, or None to serve the local model dir."""
+    if _MODEL_BASE_URI:
+        return _MODEL_BASE_URI
+    if _MODEL_DIR_EXPLICIT:
+        return None
+    return _DERIVED_MODEL_BASE_URI
+
 _TEXTURES_DIR = _DIST_DIR / "textures"
 if not _TEXTURES_DIR.is_dir() and _ALLOW_REPO_FALLBACK:
     _TEXTURES_DIR = _REPO_ROOT / "textures"
@@ -101,8 +132,22 @@ def set_viz_data(payload: dict) -> None:
 
 def set_model_dir(path: str | Path) -> None:
     """Set the directory served under /model for supplied spacecraft assets."""
-    global _MODEL_DIR
+    global _MODEL_DIR, _MODEL_DIR_EXPLICIT
     _MODEL_DIR = _existing_dir(path, "model_dir")
+    _MODEL_DIR_EXPLICIT = True
+
+
+def set_model_base_uri(uri: str) -> None:
+    """Set the base URI that /model/* redirects to for spacecraft assets."""
+    global _MODEL_BASE_URI
+    _MODEL_BASE_URI = uri.rstrip("/") or None
+
+
+def set_viz_data_source(source: str) -> None:
+    """Load viz data from a path/URI, deriving the shared-bucket model base."""
+    global _DERIVED_MODEL_BASE_URI
+    set_viz_data(load_json_source(source))
+    _DERIVED_MODEL_BASE_URI = derive_model_base_uri(source)
 
 
 def _load_json_env(name: str) -> dict | None:
@@ -121,9 +166,14 @@ def load_startup_payloads() -> None:
     if data_payload is not None:
         set_data(data_payload)
 
-    viz_payload = _load_json_env("ORBIT_VISUALIZER_VIZ_DATA")
-    if viz_payload is not None:
-        set_viz_data(viz_payload)
+    viz_source = os.environ.get("ORBIT_VISUALIZER_VIZ_DATA")
+    if viz_source:
+        try:
+            set_viz_data_source(viz_source)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to load ORBIT_VISUALIZER_VIZ_DATA={viz_source}: {exc}"
+            ) from exc
 
 
 load_startup_payloads()
@@ -256,11 +306,15 @@ def get_plan(filename: str) -> dict:
 
 
 @app.get("/model/{asset_path:path}")
-def get_model_asset(asset_path: str) -> FileResponse:
-    """Serve supplied spacecraft model assets."""
+def get_model_asset(asset_path: str) -> Response:
+    """Serve spacecraft model assets, redirecting to the shared bucket when configured."""
     requested = Path(asset_path)
     if requested.is_absolute() or ".." in requested.parts:
         raise HTTPException(status_code=400, detail="Invalid model asset path")
+
+    base_uri = resolved_model_base_uri()
+    if base_uri is not None:
+        return RedirectResponse(f"{base_uri}/{asset_path}", status_code=307)
 
     path = _MODEL_DIR / requested
     if not path.is_file():

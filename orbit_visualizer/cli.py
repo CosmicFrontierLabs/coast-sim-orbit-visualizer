@@ -38,6 +38,15 @@ def main() -> None:
         type=_existing_dir,
         help="Optional directory served at /model for spacecraft.glb and spacecraft.config.json.",
     )
+    parser.add_argument(
+        "--model-base-uri",
+        help=(
+            "Optional base URI that /model/* redirects to for spacecraft assets "
+            "(e.g. https://<bucket>.s3.<region>.amazonaws.com/model). When omitted "
+            "and --viz-data is an http(s) URI, the same origin's /model is used "
+            "unless --model-dir is given."
+        ),
+    )
     parser.add_argument("--host", default="127.0.0.1", help="Bind host.")
     parser.add_argument("--port", type=int, default=8000, help="Bind port.")
     parser.add_argument(
@@ -55,9 +64,11 @@ def main() -> None:
     if args.data is not None:
         app_module.set_data(load_json_source(args.data))
     if args.viz_data is not None:
-        app_module.set_viz_data(load_json_source(args.viz_data))
+        app_module.set_viz_data_source(args.viz_data)
     if args.model_dir is not None:
         app_module.set_model_dir(args.model_dir)
+    if args.model_base_uri is not None:
+        app_module.set_model_base_uri(args.model_base_uri)
 
     uvicorn.run(
         app_module.app,
