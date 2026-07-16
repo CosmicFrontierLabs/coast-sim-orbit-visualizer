@@ -16,25 +16,41 @@ const CONE_HALF_ANGLE_MAX_DEG = 55;
 const DEFAULT_MIN_ELEVATION_DEG = 45;
 
 // "Data downlink" stream drawn between an active station and the spacecraft:
-// a contiguous string of 1/0 glyphs marching from the spacecraft down to the
-// station, e.g.  (spacecraft) 100101010100100101010 (gstation).
-const STREAM_BITS = 24;
-const STREAM_BITS_PER_SEC = 4; // glyph slots advanced per second
+// individual 1/0 glyphs travelling from the spacecraft down to the station,
+// each with its own speed, phase, and slight lateral scatter so the flow
+// reads as motion at any zoom level.
+const STREAM_BITS = 1000;
+const STREAM_TRAVEL_SEC = 3.0; // nominal spacecraft-to-station transit time
+const STREAM_JITTER_FRAC = 0.035; // lateral scatter as a fraction of line length
 // Glyphs are physically sized to ~1/3 of the spacecraft so they read at the
 // same scale as the satellite when zoomed in, with a pixel floor so the
 // string stays legible from Earth-scale views and a screen-fraction cap as a
 // safety net for bits passing right next to the camera.
-const BIT_SC_FRACTION = 1 / 3;
-const BIT_MIN_PX = 8;
+const BIT_SC_FRACTION = 2 / 3;
+const BIT_MIN_PX = 16;
 const BIT_MAX_VIEW_FRAC = 1 / 3;
 
+// Cone fade shaping: hide cones pointing away from the camera and dim them as
+// the spacecraft recedes from the station (world units, Earth radius = 1).
+const CONE_PROXIMITY_NEAR = 0.12;
+const CONE_PROXIMITY_FAR = 1.0;
+
+const X_AXIS = new THREE.Vector3(1, 0, 0);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
+
+function fract(x: number): number {
+  return x - Math.floor(x);
+}
 
 interface StationStream {
   group: THREE.Group;
   line: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   bits: THREE.Sprite[];
+  speeds: number[];
+  phase0: number[];
+  jitterA: number[];
+  jitterB: number[];
 }
 
 interface StationMarker {
@@ -251,6 +267,10 @@ function makeStream(scene: THREE.Object3D): StationStream {
   group.add(line);
 
   const bits: THREE.Sprite[] = [];
+  const speeds: number[] = [];
+  const phase0: number[] = [];
+  const jitterA: number[] = [];
+  const jitterB: number[] = [];
   for (let i = 0; i < STREAM_BITS; i++) {
     const sprite = new THREE.Sprite(
       new THREE.SpriteMaterial({
@@ -264,10 +284,20 @@ function makeStream(scene: THREE.Object3D): StationStream {
     sprite.renderOrder = 5;
     bits.push(sprite);
     group.add(sprite);
+
+    // Deterministic per-bit variation (golden-ratio hashing keeps it stable
+    // across frames without a PRNG).
+    const r1 = fract(i * 0.618034 + 0.17);
+    const r2 = fract(i * 0.754877 + 0.41);
+    const r3 = fract(i * 0.56984 + 0.83);
+    speeds.push(1 / (STREAM_TRAVEL_SEC * (0.7 + 0.6 * r1)));
+    phase0.push(r2);
+    jitterA.push((r3 - 0.5) * 2);
+    jitterB.push((fract(r3 * 7.13 + 0.29) - 0.5) * 2);
   }
 
   scene.add(group);
-  return { group, line, bits };
+  return { group, line, bits, speeds, phase0, jitterA, jitterB };
 }
 
 function makeMarker(station: GroundStationMeta, scene: THREE.Object3D): StationMarker {
@@ -322,6 +352,11 @@ export function createGroundStationMarkerController({
   // Scratch vectors reused across frames to avoid per-frame allocation.
   const stationW = new THREE.Vector3();
   const tmp = new THREE.Vector3();
+  const zenithW = new THREE.Vector3();
+  const toCam = new THREE.Vector3();
+  const lineDir = new THREE.Vector3();
+  const perpA = new THREE.Vector3();
+  const perpB = new THREE.Vector3();
 
   function disposeStream(stream: StationStream): void {
     scene.remove(stream.group);
@@ -364,15 +399,25 @@ export function createGroundStationMarkerController({
     posAttr.setXYZ(1, satPosW.x, satPosW.y, satPosW.z);
     posAttr.needsUpdate = true;
 
-    // One glyph per slot along the line, marching from the spacecraft toward
-    // the station.
-    const shift = ((performance.now() / 1000) * STREAM_BITS_PER_SEC) % 1;
+    // Each glyph travels the spacecraft-to-station line on its own phase and
+    // speed, with a fixed lateral scatter so the packets don't stack.
+    const lineLen = satPosW.distanceTo(stationW);
+    if (lineLen <= 0) return;
+    lineDir.copy(stationW).sub(satPosW).divideScalar(lineLen);
+    perpA.crossVectors(lineDir, Math.abs(lineDir.y) < 0.9 ? Y_AXIS : X_AXIS).normalize();
+    perpB.crossVectors(lineDir, perpA);
+
+    const t = performance.now() / 1000;
     const viewTan2 = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
     const viewportH = Math.max(innerHeight, 1);
 
     for (let i = 0; i < stream.bits.length; i++) {
-      const u = (((i + shift) % STREAM_BITS) + 0.5) / STREAM_BITS;
-      tmp.copy(satPosW).lerp(stationW, u);
+      const u = fract(stream.phase0[i] + t * stream.speeds[i]);
+      tmp
+        .copy(satPosW)
+        .lerp(stationW, u)
+        .addScaledVector(perpA, lineLen * STREAM_JITTER_FRAC * stream.jitterA[i])
+        .addScaledVector(perpB, lineLen * STREAM_JITTER_FRAC * stream.jitterB[i]);
       stream.bits[i].position.copy(tmp);
 
       // Spacecraft-relative physical size, floored in pixels for far views
@@ -398,11 +443,25 @@ export function createGroundStationMarkerController({
       marker.reticle.scale.setScalar(active ? 1.18 : 1.0);
       marker.label.material.opacity = active ? 0.92 : 0.58;
 
+      marker.group.getWorldPosition(stationW);
+
+      // Fade the cone out when its zenith points away from the camera (station
+      // on the far side of Earth) and dim it as the spacecraft recedes.
+      zenithW.copy(stationW).normalize();
+      toCam.copy(camera.position).sub(stationW).normalize();
+      const facing = THREE.MathUtils.smoothstep(zenithW.dot(toCam), -0.05, 0.25);
+      const proximity =
+        1 -
+        THREE.MathUtils.smoothstep(
+          stationW.distanceTo(satPosW),
+          CONE_PROXIMITY_NEAR,
+          CONE_PROXIMITY_FAR,
+        );
       marker.cone.material.color.setHex(active ? 0xffd479 : 0x5fd4ff);
-      marker.cone.material.opacity = active ? 0.22 : 0.1;
+      marker.cone.material.opacity =
+        (active ? 0.26 : 0.12) * facing * (0.2 + 0.8 * proximity);
 
       if (active) {
-        marker.group.getWorldPosition(stationW);
         updateStream(marker.stream, satPosW);
       } else {
         marker.stream.group.visible = false;
