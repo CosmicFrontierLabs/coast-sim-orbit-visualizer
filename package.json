@@ -1,0 +1,36 @@
+{
+  "name": "coast-sim-orbit-visualizer",
+  "version": "1.0.0",
+  "description": "3-D orbit visualizer for COASTSim DITL simulations.",
+  "type": "module",
+  "scripts": {
+    "build": "vite build && node scripts/copy-static-assets.mjs",
+    "dev": "vite",
+    "preview": "vite preview",
+    "typecheck": "tsc",
+    "start:plan": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "luxon": "^3.7.2",
+    "three": "^0.183.2"
+  },
+  "devDependencies": {
+    "@types/luxon": "^3.7.1",
+    "@types/three": "^0.183.1",
+    "typescript": "^5.9.2",
+    "vite": "^5.4.11",
+    "tsx": "^4.19.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CosmicFrontierLabs/coast-sim.git"
+  },
+  "keywords": ["spacecraft", "simulation", "visualization", "typescript"],
+  "author": "Cosmic Frontier Labs",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/CosmicFrontierLabs/coast-sim/issues"
+  },
+  "homepage": "https://github.com/CosmicFrontierLabs/coast-sim#readme"
+}
+

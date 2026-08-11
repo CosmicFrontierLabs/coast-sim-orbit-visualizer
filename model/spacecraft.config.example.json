@@ -1,0 +1,15 @@
+{
+  "modelFrame": {
+    "asset": "model/spacecraft.glb",
+    "description": "Example CAD/GLB local axes as authored in a mission spacecraft model file"
+  },
+  "spacecraftFrame": {
+    "source": "COAST viz_data attitude output",
+    "description": "COAST spacecraft body frame applied by the visualizer after RA/Dec/Roll attitude is evaluated; +X_SC is boresight"
+  },
+  "axisMapping": {
+    "modelBoresight": "+Z",
+    "spacecraftBoresight": "+X",
+    "rollAboutSpacecraftBoresightDeg": 90
+  }
+}

@@ -1,0 +1,8 @@
+node_modules
+dist
+.venv/
+*.egg-info/
+__pycache__/
+*.pyc
+model/*.glb
+model/spacecraft.config.json

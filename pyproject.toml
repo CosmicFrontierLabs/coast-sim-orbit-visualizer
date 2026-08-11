@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools_scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orbit-visualizer"
+dynamic = ["version"]
+description = "Interactive orbit visualizer for COASTSim DITL simulations"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "coast-sim>=0.1",
+]
+
+[project.scripts]
+orbit-visualizer = "orbit_visualizer.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["orbit_visualizer*"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+orbit_visualizer = [
+    "dist/**/*",
+]
+
+[tool.setuptools_scm]
+# If no git tags are present in a clone, keep a stable baseline.
+fallback_version = "0.1.1"
+local_scheme = "no-local-version"

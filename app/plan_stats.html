@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>COASTSim Plan Statistics</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="orbit_viz.css" />
+  </head>
+  <body class="stats-page">
+    <main id="stats-shell">
+      <header id="stats-header">
+        <div>
+          <div class="stats-kicker">COASTSim</div>
+          <h1>Plan Statistics</h1>
+          <div id="stats-status">Loading plan statistics…</div>
+        </div>
+        <nav id="stats-nav">
+          <button id="export-json" type="button">Export JSON</button>
+          <button id="export-csv" type="button">Export CSV</button>
+          <a class="button-link" href="./">3D View</a>
+        </nav>
+      </header>
+
+      <section id="stats-summary" class="stats-grid"></section>
+
+      <section class="stats-columns">
+        <div class="stats-section">
+          <div class="stats-section-head">
+            <h2>Constraint Health</h2>
+          </div>
+          <div id="constraint-summary" class="metric-grid"></div>
+        </div>
+        <div class="stats-section">
+          <div class="stats-section-head">
+            <h2>Executed Attitude</h2>
+          </div>
+          <div class="stats-metric-group">
+            <h3>Science Pointing Error</h3>
+            <div id="attitude-consistency" class="metric-grid"></div>
+          </div>
+          <div class="stats-metric-group">
+            <h3>GSP Tracking Motion</h3>
+            <div id="gsp-tracking-motion" class="metric-grid"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="stats-columns">
+        <div class="stats-section">
+          <div class="stats-section-head">
+            <h2>Orbit Context</h2>
+          </div>
+          <div id="orbit-summary" class="metric-grid"></div>
+        </div>
+        <div class="stats-section">
+          <div class="stats-section-head">
+            <h2>Downlink Estimate</h2>
+            <span id="downlink-rate"></span>
+          </div>
+          <div id="downlink-table"></div>
+        </div>
+      </section>
+
+      <section class="stats-section">
+        <div class="stats-section-head">
+          <h2>Plan Timeline</h2>
+          <span>Activity, slew overhead, and eclipse over the plan window</span>
+        </div>
+        <div id="timeline-chart"></div>
+      </section>
+
+      <section class="stats-section">
+        <div class="stats-section-head">
+          <h2>Time Accounting</h2>
+          <span id="stats-window"></span>
+        </div>
+        <div id="time-bars" class="time-bars"></div>
+      </section>
+
+      <section class="stats-columns">
+        <div class="stats-section">
+          <div class="stats-section-head">
+            <h2>Science Efficiency</h2>
+          </div>
+          <div id="science-summary" class="metric-grid"></div>
+        </div>
+        <div class="stats-section">
+          <div class="stats-section-head">
+            <h2>Slew Distribution</h2>
+          </div>
+          <div id="slew-distribution"></div>
+        </div>
+      </section>
+
+      <section class="stats-columns">
+        <div class="stats-section">
+          <div class="stats-section-head">
+            <h2>Activities</h2>
+          </div>
+          <div id="activity-table"></div>
+        </div>
+        <div class="stats-section">
+          <div class="stats-section-head">
+            <h2>Ground Stations</h2>
+          </div>
+          <div id="station-table"></div>
+        </div>
+      </section>
+
+      <section class="stats-columns">
+        <div class="stats-section">
+          <div class="stats-section-head">
+            <h2>Longest Gaps</h2>
+          </div>
+          <div id="gap-classification"></div>
+          <div id="gap-table"></div>
+        </div>
+        <div class="stats-section">
+          <div class="stats-section-head">
+            <h2>Slew Outliers</h2>
+          </div>
+          <div id="slew-scatter"></div>
+          <div id="slew-table"></div>
+        </div>
+      </section>
+
+      <div id="checks-anchor"></div>
+      <section id="checks-section" class="stats-section">
+        <div class="stats-section-head">
+          <h2>Checks</h2>
+        </div>
+        <div id="finding-table"></div>
+      </section>
+    </main>
+
+    <script type="module" src="./config.js"></script>
+    <script type="module" src="./plan_stats.ts"></script>
+  </body>
+</html>

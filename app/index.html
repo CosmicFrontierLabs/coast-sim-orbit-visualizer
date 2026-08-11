@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>COASTSim 3D Orbit Visualizer</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="orbit_viz.css" />
+  </head>
+  <body>
+    <div id="loader">
+      <div class="spinner"></div>
+      <div id="loader-msg">Loading…</div>
+    </div>
+
+    <div id="container">
+      <div id="drop-overlay">
+        <div>📂 Drop a <strong>viz_data.json</strong> file here</div>
+      </div>
+
+      <!-- HUD left -->
+      <div id="hud">
+        <div class="panel">
+          <div class="panel-title">ORBIT</div>
+          <div><span class="lbl">Alt </span><span class="val" id="h-alt">—</span> km</div>
+          <div><span class="lbl">Lat </span><span class="val" id="h-lat">—</span>°</div>
+          <div><span class="lbl">Lon </span><span class="val" id="h-lon">—</span>°</div>
+          <div><span class="lbl">Beta </span><span class="val" id="h-beta">—</span>°</div>
+          <div><span class="lbl">Light</span><span class="val" id="h-eclipse">—</span></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">ATTITUDE</div>
+          <div><span class="lbl">RA </span><span class="val" id="h-ra">—</span>°</div>
+          <div><span class="lbl">Dec </span><span class="val" id="h-dec">—</span>°</div>
+          <div><span class="lbl">Roll </span><span class="val" id="h-roll">—</span>°</div>
+          <div><span class="lbl">Panel∠Sun</span><span class="val" id="h-panel-sun">—</span>°</div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">TARGET</div>
+          <div><span class="lbl">Mode </span><span class="val" id="h-mode">—</span></div>
+          <div><span class="val" id="h-tgt">—</span></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">SELECTION</div>
+          <div><span class="lbl">Type </span><span class="val" id="h-sel-kind">None</span></div>
+          <div><span class="val" id="h-sel-name">Click a timeline segment</span></div>
+          <div><span class="val multiline" id="h-sel-detail"></span></div>
+        </div>
+      </div>
+
+      <!-- Controls right -->
+      <div id="controls">
+        <div class="ctrl-title">⚙ CONTROLS</div>
+        <label
+          >Speed
+          <input type="range" id="speed" min="0" max="7" step="1" value="3" />
+          <span id="speed-display">×60</span>
+        </label>
+        <label>SC axes <input type="checkbox" id="show-axes" checked /></label>
+        <label>Sun ray <input type="checkbox" id="show-sun" checked /></label>
+        <label>SC → Sun vec <input type="checkbox" id="show-sc-sun" /></label>
+        <label>ECI grid <input type="checkbox" id="show-grid" /></label>
+        <label
+          >Camera view
+          <select id="camera-view">
+            <option value="follow-behind">Follow: behind (-V)</option>
+            <option value="follow-above">Follow: above (+R)</option>
+            <option value="pretty">Horizon view</option>
+            <option value="earth-fixed">Earth fixed: GCRS above</option>
+          </select>
+        </label>
+        <button id="btn-reset-cam">Reset Camera</button>
+        <a class="button-link" href="./plan_stats.html">Plan Stats</a>
+        <button id="btn-play">⏸ Pause</button>
+      </div>
+
+      <div id="sc-label"><span class="sc-label-text">SC</span></div>
+
+      <!-- Legend -->
+      <div id="legend">
+        <div><span class="leg-line leg-vel"></span>Velocity (RAM)</div>
+        <div><span class="leg-line leg-boresight"></span>+X SC boresight</div>
+        <div><span class="leg-line leg-panel-axis"></span>+Y SC</div>
+        <div><span class="leg-line leg-panel-sun"></span>Panel normal → ☀</div>
+        <div><span class="leg-line leg-sc-up"></span>+Z SC up</div>
+        <div><span class="leg-line leg-sun"></span>Sun direction</div>
+        <div><span class="leg-line leg-sc-sun"></span>SC → Sun vector</div>
+      </div>
+
+      <div id="scrubber">
+        <div id="scrub-row1">
+          <span id="scrub-time">—</span>
+          <span id="scrub-label">—</span>
+        </div>
+        <div id="scrub-track">
+          <div id="scrub-marks"></div>
+          <input type="range" id="scrub-slider" min="0" max="10000" step="1" value="0" />
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./config.js"></script>
+    <script type="module" src="./orbit_viz.ts"></script>
+  </body>
+</html>
