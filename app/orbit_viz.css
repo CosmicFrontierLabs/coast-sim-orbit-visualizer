@@ -805,6 +805,110 @@ body.dragging #drop-overlay {
   border-radius: 2px;
 }
 
+.sun-angle-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border-top: 1px solid #25314a;
+  border-bottom: 1px solid #25314a;
+  margin-bottom: 12px;
+}
+
+.sun-angle-stat {
+  min-width: 0;
+  padding: 10px 12px;
+  border-right: 1px solid #25314a;
+}
+
+.sun-angle-stat:last-child {
+  border-right: 0;
+}
+
+.sun-angle-stat span,
+.sun-angle-stat strong {
+  display: block;
+}
+
+.sun-angle-stat span {
+  color: #8a9bb6;
+  font-size: 10px;
+  margin-bottom: 5px;
+}
+
+.sun-angle-stat strong {
+  color: #f4f8ff;
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.sun-angle-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-bottom: 6px;
+  color: #9aa9bf;
+  font-size: 10px;
+}
+
+.sun-angle-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sun-angle-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.sun-angle-chart {
+  display: block;
+  width: 100%;
+  min-height: 250px;
+  max-height: 360px;
+  background: #0b1220;
+  border: 1px solid rgba(37, 49, 74, 0.9);
+  border-radius: 5px;
+}
+
+.sun-angle-grid-line {
+  stroke: #25314a;
+  stroke-width: 1;
+}
+
+.sun-angle-axis-label,
+.sun-angle-reference-label {
+  fill: #8292aa;
+  font-size: 10px;
+}
+
+.sun-angle-axis-title {
+  fill: #aebbd0;
+  font-size: 11px;
+}
+
+.sun-angle-bar {
+  opacity: 0.9;
+}
+
+.sun-angle-bar:hover {
+  opacity: 1;
+  stroke: #f4f8ff;
+  stroke-width: 1;
+}
+
+.sun-angle-reference {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+
+.sun-angle-reference-45 { stroke: #ffd36e; }
+.sun-angle-reference-90 { stroke: #ff8c8c; }
+
 .time-bar-row {
   display: grid;
   grid-template-columns: 130px minmax(120px, 1fr) 145px;
@@ -1087,6 +1191,22 @@ td.num {
 
   .metric-grid {
     grid-template-columns: 1fr;
+  }
+
+  .sun-angle-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sun-angle-stat {
+    border-bottom: 1px solid #25314a;
+  }
+
+  .sun-angle-stat:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .sun-angle-chart {
+    min-height: 210px;
   }
 
   .gap-class-row {

@@ -7,6 +7,7 @@
     "build": "vite build && node scripts/copy-static-assets.mjs",
     "dev": "vite",
     "preview": "vite preview",
+    "test:frontend": "node --import tsx --test src/*.spec.ts",
     "typecheck": "tsc",
     "start:plan": "tsx src/cli.ts"
   },
@@ -33,4 +34,3 @@
   },
   "homepage": "https://github.com/CosmicFrontierLabs/coast-sim#readme"
 }
-

@@ -15,6 +15,15 @@ declare global {
 
 const ASSET_BASE = window.VIZ_ASSET_BASE ?? "./";
 const DEFAULT_DOWNLINK_RATE_MBPS = 7.33;
+const SVG_NS = "http://www.w3.org/2000/svg";
+const PANEL_SUN_MODE_COLORS: Record<string, string> = {
+  SCIENCE: "#4aa3ff",
+  SLEWING: "#d66bff",
+  CHARGING: "#f1ba4a",
+  PASS: "#55d69c",
+  IDLE: "#667085",
+  OTHER: "#b6c2d8",
+};
 
 let currentStats: PlanStats | null = null;
 
@@ -396,6 +405,179 @@ function renderTimelineChart(stats: PlanStats): void {
     legend.append(item);
   });
   chart.append(legend);
+}
+
+function panelDirectionLabel(direction: [number, number, number] | null): string {
+  if (!direction) return "Panel direction unavailable";
+  const axisNames = ["X", "Y", "Z"];
+  for (let i = 0; i < direction.length; i++) {
+    const aligned = direction.every((value, j) => j === i || Math.abs(value) < 1e-9);
+    if (Math.abs(Math.abs(direction[i]) - 1) < 1e-9 && aligned) {
+      return `Configured body ${direction[i] < 0 ? "-" : "+"}${axisNames[i]} panel normal`;
+    }
+  }
+  return `Configured body panel normal [${direction.map((value) => value.toFixed(3)).join(", ")}]`;
+}
+
+function niceAxisMaximum(value: number): number {
+  if (value <= 0) return 1;
+  const exponent = 10 ** Math.floor(Math.log10(value));
+  const fraction = value / exponent;
+  const niceFraction = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
+  return niceFraction * exponent;
+}
+
+function renderPanelSunAngle(stats: PlanStats): void {
+  const summary = stats.panelSunAngle;
+  const context = mustEl<HTMLElement>("panel-sun-angle-context");
+  const summaryRoot = mustEl<HTMLElement>("panel-sun-angle-summary");
+  const chartRoot = mustEl<HTMLElement>("panel-sun-angle-histogram");
+  clear(summaryRoot);
+  clear(chartRoot);
+  context.textContent = panelDirectionLabel(summary.panelNormalSc);
+
+  if (!summary.available) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = `Histogram unavailable: ${summary.unavailableReason ?? "required telemetry is missing"}.`;
+    chartRoot.append(empty);
+    return;
+  }
+
+  [
+    ["Median", formatDegrees(summary.medianDeg, 1)],
+    ["Mean", formatDegrees(summary.meanDeg, 1)],
+    ["Range", `${formatDegrees(summary.minDeg, 1)} to ${formatDegrees(summary.maxDeg, 1)}`],
+    ["At or below 45°", `${percent(summary.within45Sec, summary.durationSec)} · ${formatSeconds(summary.within45Sec)}`],
+    ["At or below 90°", `${percent(summary.within90Sec, summary.durationSec)} · ${formatSeconds(summary.within90Sec)}`],
+  ].forEach(([labelText, valueText]) => {
+    const item = document.createElement("div");
+    item.className = "sun-angle-stat";
+    const label = document.createElement("span");
+    label.textContent = labelText;
+    const value = document.createElement("strong");
+    value.textContent = valueText;
+    item.append(label, value);
+    summaryRoot.append(item);
+  });
+
+  const legend = document.createElement("div");
+  legend.className = "sun-angle-legend";
+  summary.modes.forEach((mode) => {
+    const item = document.createElement("span");
+    item.className = "sun-angle-legend-item";
+    const swatch = document.createElement("span");
+    swatch.className = "sun-angle-swatch";
+    swatch.style.backgroundColor = PANEL_SUN_MODE_COLORS[mode] ?? PANEL_SUN_MODE_COLORS.OTHER;
+    item.append(swatch, text(mode));
+    legend.append(item);
+  });
+  chartRoot.append(legend);
+
+  const width = 1000;
+  const height = 330;
+  const margin = { top: 16, right: 18, bottom: 48, left: 64 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const maxBinMinutes = Math.max(
+    ...summary.bins.map(
+      (bin) => Object.values(bin.durationSecByMode).reduce((total, duration) => total + duration, 0) / 60,
+    ),
+  );
+  const yMax = niceAxisMaximum(maxBinMinutes);
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.classList.add("sun-angle-chart");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute(
+    "aria-label",
+    `Histogram of Sun angle to the configured solar-panel normal over ${formatSeconds(summary.durationSec)}`,
+  );
+
+  for (let tick = 0; tick <= 4; tick++) {
+    const minutes = (yMax * tick) / 4;
+    const y = margin.top + plotHeight - (minutes / yMax) * plotHeight;
+    const line = document.createElementNS(SVG_NS, "line");
+    line.setAttribute("class", "sun-angle-grid-line");
+    line.setAttribute("x1", String(margin.left));
+    line.setAttribute("x2", String(width - margin.right));
+    line.setAttribute("y1", String(y));
+    line.setAttribute("y2", String(y));
+    svg.append(line);
+    const label = document.createElementNS(SVG_NS, "text");
+    label.setAttribute("class", "sun-angle-axis-label");
+    label.setAttribute("x", String(margin.left - 9));
+    label.setAttribute("y", String(y + 4));
+    label.setAttribute("text-anchor", "end");
+    label.textContent = `${Math.round(minutes)}`;
+    svg.append(label);
+  }
+
+  summary.bins.forEach((bin, binIndex) => {
+    const binWidth = plotWidth / summary.bins.length;
+    let stackedMinutes = 0;
+    summary.modes.forEach((mode) => {
+      const durationSec = bin.durationSecByMode[mode] ?? 0;
+      if (durationSec <= 0) return;
+      const minutes = durationSec / 60;
+      const barHeight = (minutes / yMax) * plotHeight;
+      const rect = document.createElementNS(SVG_NS, "rect");
+      rect.setAttribute("class", "sun-angle-bar");
+      rect.setAttribute("x", String(margin.left + binIndex * binWidth + 0.7));
+      rect.setAttribute("y", String(margin.top + plotHeight - ((stackedMinutes + minutes) / yMax) * plotHeight));
+      rect.setAttribute("width", String(Math.max(1, binWidth - 1.4)));
+      rect.setAttribute("height", String(Math.max(0.5, barHeight)));
+      rect.setAttribute("fill", PANEL_SUN_MODE_COLORS[mode] ?? PANEL_SUN_MODE_COLORS.OTHER);
+      const title = document.createElementNS(SVG_NS, "title");
+      title.textContent = `${bin.minDeg}-${bin.maxDeg}° · ${mode}: ${formatSeconds(durationSec)}`;
+      rect.append(title);
+      svg.append(rect);
+      stackedMinutes += minutes;
+    });
+  });
+
+  [0, 30, 60, 90, 120, 150, 180].forEach((degrees) => {
+    const x = margin.left + (degrees / 180) * plotWidth;
+    const label = document.createElementNS(SVG_NS, "text");
+    label.setAttribute("class", "sun-angle-axis-label");
+    label.setAttribute("x", String(x));
+    label.setAttribute("y", String(height - 24));
+    label.setAttribute("text-anchor", "middle");
+    label.textContent = `${degrees}°`;
+    svg.append(label);
+  });
+
+  [45, 90].forEach((degrees) => {
+    const x = margin.left + (degrees / 180) * plotWidth;
+    const line = document.createElementNS(SVG_NS, "line");
+    line.setAttribute("class", `sun-angle-reference sun-angle-reference-${degrees}`);
+    line.setAttribute("x1", String(x));
+    line.setAttribute("x2", String(x));
+    line.setAttribute("y1", String(margin.top));
+    line.setAttribute("y2", String(margin.top + plotHeight));
+    svg.append(line);
+    const label = document.createElementNS(SVG_NS, "text");
+    label.setAttribute("class", "sun-angle-reference-label");
+    label.setAttribute("x", String(x + 5));
+    label.setAttribute("y", String(margin.top + 13));
+    label.textContent = `${degrees}°`;
+    svg.append(label);
+  });
+
+  const xTitle = document.createElementNS(SVG_NS, "text");
+  xTitle.setAttribute("class", "sun-angle-axis-title");
+  xTitle.setAttribute("x", String(margin.left + plotWidth / 2));
+  xTitle.setAttribute("y", String(height - 3));
+  xTitle.setAttribute("text-anchor", "middle");
+  xTitle.textContent = "Sun angle to panel normal";
+  svg.append(xTitle);
+  const yTitle = document.createElementNS(SVG_NS, "text");
+  yTitle.setAttribute("class", "sun-angle-axis-title");
+  yTitle.setAttribute("transform", `translate(15 ${margin.top + plotHeight / 2}) rotate(-90)`);
+  yTitle.setAttribute("text-anchor", "middle");
+  yTitle.textContent = "Duration (minutes)";
+  svg.append(yTitle);
+  chartRoot.append(svg);
 }
 
 function metric(labelText: string, valueText: string, detailText: string): HTMLElement {
@@ -834,6 +1016,7 @@ function render(stats: PlanStats): void {
   renderOrbitContext(stats);
   renderDownlink(stats);
   renderTimelineChart(stats);
+  renderPanelSunAngle(stats);
   renderTimeBars(stats);
   renderScienceSummary(stats);
   renderSlewDistribution(stats);

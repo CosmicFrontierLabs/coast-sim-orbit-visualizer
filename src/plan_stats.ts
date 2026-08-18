@@ -164,6 +164,28 @@ export interface OrbitContextSummary {
   latMaxDeg: number | null;
 }
 
+export interface PanelSunAngleBin {
+  minDeg: number;
+  maxDeg: number;
+  durationSecByMode: Record<string, number>;
+}
+
+export interface PanelSunAngleSummary {
+  available: boolean;
+  unavailableReason: string | null;
+  panelNormalSc: [number, number, number] | null;
+  samples: number;
+  durationSec: number;
+  minDeg: number | null;
+  meanDeg: number | null;
+  medianDeg: number | null;
+  maxDeg: number | null;
+  within45Sec: number;
+  within90Sec: number;
+  modes: string[];
+  bins: PanelSunAngleBin[];
+}
+
 export interface IntegrityFinding {
   severity: "error" | "warn";
   label: string;
@@ -210,6 +232,7 @@ export interface PlanStats {
   attitudeConsistency: AttitudeConsistencySummary;
   gspExecution: GspExecutionSummary;
   orbitContext: OrbitContextSummary;
+  panelSunAngle: PanelSunAngleSummary;
   science: ScienceSummary;
   timeline: TimelineChartLane[];
   slewDistribution: SlewDistributionBin[];
@@ -445,6 +468,158 @@ function median(values: number[]): number {
   const mid = Math.floor(sorted.length / 2);
   if (sorted.length % 2 === 1) return sorted[mid];
   return (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+const PANEL_SUN_BIN_WIDTH_DEG = 5;
+const PANEL_SUN_MODE_ORDER = ["SCIENCE", "SLEWING", "CHARGING", "PASS", "IDLE", "OTHER"];
+
+interface WeightedAngleSample {
+  angleDeg: number;
+  durationSec: number;
+  mode: string;
+}
+
+function emptyPanelSunAngle(reason: string, panelNormalSc: [number, number, number] | null): PanelSunAngleSummary {
+  return {
+    available: false,
+    unavailableReason: reason,
+    panelNormalSc,
+    samples: 0,
+    durationSec: 0,
+    minDeg: null,
+    meanDeg: null,
+    medianDeg: null,
+    maxDeg: null,
+    within45Sec: 0,
+    within90Sec: 0,
+    modes: [],
+    bins: [],
+  };
+}
+
+function panelSunMode(data: VizData, entries: WindowRef[], index: number, time: number): string {
+  const reported = cleanTelemetryString(data.ephem.acs_mode?.[index])?.toUpperCase();
+  if (reported) {
+    if (reported.includes("SCIENCE") || reported.includes("OBSERV")) return "SCIENCE";
+    if (reported.includes("SLEW")) return "SLEWING";
+    if (reported.includes("CHARG") || reported.includes("SUN")) return "CHARGING";
+    if (reported.includes("PASS") || reported.includes("GSP")) return "PASS";
+    if (reported.includes("IDLE")) return "IDLE";
+    return "OTHER";
+  }
+
+  const active = entryAtTime(entries, time);
+  if (!active) return "IDLE";
+  if (time < active.begin + numericField(active.entry.slewtime)) return "SLEWING";
+  const type = entryType(active.entry);
+  if (type === "GSP") return "PASS";
+  if (isChargeType(type)) return "CHARGING";
+  if (isScienceType(type)) return "SCIENCE";
+  return "OTHER";
+}
+
+function weightedMedianAngle(samples: WeightedAngleSample[], totalDurationSec: number): number {
+  const sorted = [...samples].sort((a, b) => a.angleDeg - b.angleDeg);
+  const midpoint = totalDurationSec / 2;
+  let cumulative = 0;
+  for (const sample of sorted) {
+    cumulative += sample.durationSec;
+    if (cumulative >= midpoint) return sample.angleDeg;
+  }
+  return sorted.at(-1)?.angleDeg ?? 0;
+}
+
+/**
+ * Summarize the angle between the GCRS Sun direction and configured panel
+ * normal. COAST quaternions are Hamilton, scalar-first, and inertial-to-body.
+ */
+export function computePanelSunAngle(data: VizData): PanelSunAngleSummary {
+  const direction = data.meta.solar_panel?.direction_sc;
+  const panel = vec3(direction);
+  if (!direction || !panel || panel.lengthSq() === 0) {
+    return emptyPanelSunAngle("configured panel direction is unavailable", null);
+  }
+  panel.normalize();
+  const panelNormalSc: [number, number, number] = [panel.x, panel.y, panel.z];
+
+  const ephem = data.ephem;
+  const n = ephem.utime.length;
+  const quaternions = [ephem.quat_w, ephem.quat_x, ephem.quat_y, ephem.quat_z];
+  if (n < 2 || quaternions.some((values) => !Array.isArray(values) || values.length !== n)) {
+    return emptyPanelSunAngle("complete attitude quaternion telemetry is unavailable", panelNormalSc);
+  }
+  if (ephem.sunvec.length !== n) {
+    return emptyPanelSunAngle("Sun-vector telemetry length does not match ephemeris time", panelNormalSc);
+  }
+
+  const qw = ephem.quat_w as number[];
+  const qx = ephem.quat_x as number[];
+  const qy = ephem.quat_y as number[];
+  const qz = ephem.quat_z as number[];
+  const entries = sortedValidEntries(data.ppst);
+  const samples: WeightedAngleSample[] = [];
+
+  // Samples represent the interval beginning at utime[i]. The final timestamp
+  // is a boundary and intentionally contributes no duration.
+  for (let i = 0; i < n - 1; i++) {
+    const durationSec = positiveDuration(ephem.utime[i], ephem.utime[i + 1]);
+    const sun = vec3(ephem.sunvec[i]);
+    if (durationSec <= 0 || !sun || sun.lengthSq() === 0) continue;
+    if (![qw[i], qx[i], qy[i], qz[i]].every(finiteNumber)) continue;
+
+    const inertialToBody = new THREE.Quaternion(qx[i], qy[i], qz[i], qw[i]);
+    if (inertialToBody.lengthSq() === 0) continue;
+    inertialToBody.normalize();
+    const sunBody = sun.normalize().applyQuaternion(inertialToBody);
+    samples.push({
+      angleDeg: angleDeg(sunBody, panel),
+      durationSec,
+      mode: panelSunMode(data, entries, i, ephem.utime[i]),
+    });
+  }
+
+  if (samples.length === 0) {
+    return emptyPanelSunAngle("no valid panel-angle intervals are available", panelNormalSc);
+  }
+
+  const bins: PanelSunAngleBin[] = Array.from({ length: 180 / PANEL_SUN_BIN_WIDTH_DEG }, (_, index) => ({
+    minDeg: index * PANEL_SUN_BIN_WIDTH_DEG,
+    maxDeg: (index + 1) * PANEL_SUN_BIN_WIDTH_DEG,
+    durationSecByMode: {},
+  }));
+  const activeModes = new Set<string>();
+  let durationSec = 0;
+  let weightedAngleSum = 0;
+  let within45Sec = 0;
+  let within90Sec = 0;
+
+  for (const sample of samples) {
+    durationSec += sample.durationSec;
+    weightedAngleSum += sample.angleDeg * sample.durationSec;
+    if (sample.angleDeg <= 45) within45Sec += sample.durationSec;
+    if (sample.angleDeg <= 90) within90Sec += sample.durationSec;
+    activeModes.add(sample.mode);
+    const binIndex = Math.min(bins.length - 1, Math.floor(sample.angleDeg / PANEL_SUN_BIN_WIDTH_DEG));
+    const durations = bins[binIndex].durationSecByMode;
+    durations[sample.mode] = (durations[sample.mode] ?? 0) + sample.durationSec;
+  }
+
+  const angles = samples.map((sample) => sample.angleDeg);
+  return {
+    available: true,
+    unavailableReason: null,
+    panelNormalSc,
+    samples: samples.length,
+    durationSec,
+    minDeg: Math.min(...angles),
+    meanDeg: weightedAngleSum / durationSec,
+    medianDeg: weightedMedianAngle(samples, durationSec),
+    maxDeg: Math.max(...angles),
+    within45Sec,
+    within90Sec,
+    modes: PANEL_SUN_MODE_ORDER.filter((mode) => activeModes.has(mode)),
+    bins,
+  };
 }
 
 function computeScienceSummary(ppst: PPSTEntry[]): ScienceSummary {
@@ -1524,6 +1699,7 @@ export function buildPlanStats(data: VizData, options: PlanStatsOptions = {}): P
     attitudeConsistency,
     gspExecution,
     orbitContext: computeOrbitContext(data, eclipseSegments),
+    panelSunAngle: computePanelSunAngle(data),
     science: computeScienceSummary(data.ppst),
     timeline: computeTimeline(data, entries, gaps, start, end, eclipseSegments),
     slewDistribution: computeSlewDistribution(slews),
