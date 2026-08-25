@@ -103,7 +103,8 @@ There are two different frames involved:
   the CAD export. These axes only describe how the mesh was authored.
 - **COAST spacecraft frame**: the body frame used by COAST `viz_data` attitude
   output. The visualizer evaluates COAST RA/Dec/Roll into this frame, where
-  `+X_SC` is the spacecraft boresight.
+  `+X_SC` is the spacecraft boresight. Roll is a right-handed physical
+  spacecraft rotation about `+X_SC`.
 
 The optional runtime `model/spacecraft.config.json` file maps the CAD/GLB model
 frame into the COAST spacecraft frame. It does not change the COAST attitude

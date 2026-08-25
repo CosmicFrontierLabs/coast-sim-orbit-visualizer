@@ -31,33 +31,41 @@ export function scRadialBasis(pos: THREE.Vector3): BasisRTB {
   return { r, t, b };
 }
 
+function zeroRollBodyAxes(ra: number, dec: number): {
+  x: THREE.Vector3;
+  y: THREE.Vector3;
+  z: THREE.Vector3;
+} {
+  const r = ra * DEG;
+  const d = dec * DEG;
+  const cosRa = Math.cos(r);
+  const sinRa = Math.sin(r);
+  const cosDec = Math.cos(d);
+  const sinDec = Math.sin(d);
+  // This is projected celestial north away from the poles and its
+  // RA-dependent Euler continuation at the poles, matching COAST.
+  return {
+    x: new THREE.Vector3(cosDec * cosRa, cosDec * sinRa, sinDec),
+    y: new THREE.Vector3(-sinRa, cosRa, 0),
+    z: new THREE.Vector3(-sinDec * cosRa, -sinDec * sinRa, cosDec),
+  };
+}
+
 /**
  * Build spacecraft attitude quaternion from PPST RA/Dec/Roll.
  * SC frame convention:
  *   +X_SC points at (RA, Dec) (XRT boresight), and commanded roll is a
- *   NEGATIVE rotation about +X_SC from north-perp toward east.
+ *   right-handed physical rotation about +X_SC.
  */
 export function buildAttitudeQ(ra: number, dec: number, roll: number): THREE.Quaternion {
-  const boresight = radec2eci(ra, dec);
-  // Align +X_SC (boresight) to target direction in ECI.
-  const q1 = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), boresight);
-  // North-perpendicular reference for roll=0.
-  const ncp = new THREE.Vector3(0, 0, 1);
-  let northPerp = ncp.clone().sub(boresight.clone().multiplyScalar(ncp.dot(boresight)));
-  if (northPerp.lengthSq() < 1e-8) northPerp.set(0, 1, 0);
-  else northPerp.normalize();
-
-  // After q1, +Z_SC is an arbitrary in-plane reference; rotate it to northPerp.
-  const zRefAfterQ1 = new THREE.Vector3(0, 0, 1).applyQuaternion(q1);
-  const angle0 = Math.atan2(
-    boresight.dot(zRefAfterQ1.clone().cross(northPerp)),
-    zRefAfterQ1.dot(northPerp),
-  );
-  const q2 = new THREE.Quaternion().setFromAxisAngle(boresight, angle0);
-
-  // Apply commanded roll as negative about boresight (+X_SC).
-  const q3 = new THREE.Quaternion().setFromAxisAngle(boresight, -roll * DEG);
-  return q3.multiply(q2).multiply(q1);
+  const zeroRoll = zeroRollBodyAxes(ra, dec);
+  const rollRad = roll * DEG;
+  const cosRoll = Math.cos(rollRad);
+  const sinRoll = Math.sin(rollRad);
+  const y = zeroRoll.y.clone().multiplyScalar(cosRoll).addScaledVector(zeroRoll.z, sinRoll);
+  const z = zeroRoll.y.clone().multiplyScalar(-sinRoll).addScaledVector(zeroRoll.z, cosRoll);
+  const rotation = new THREE.Matrix4().makeBasis(zeroRoll.x, y, z);
+  return new THREE.Quaternion().setFromRotationMatrix(rotation).normalize();
 }
 
 /**
@@ -83,13 +91,8 @@ export function wrap180(deg: number): number {
  * @returns {number}
  */
 export function renderedRollDeg(bodyQ: THREE.Quaternion, ra: number, dec: number): number {
-  const boresight = radec2eci(ra, dec).normalize();
-  const ncp = new THREE.Vector3(0, 0, 1);
-  let northPerp = ncp.clone().sub(boresight.clone().multiplyScalar(ncp.dot(boresight)));
-  if (northPerp.lengthSq() < 1e-8) northPerp.set(0, 1, 0);
-  else northPerp.normalize();
-  const eastPerp = boresight.clone().cross(northPerp).normalize();
+  const zeroRoll = zeroRollBodyAxes(ra, dec);
   const zSCinECI = new THREE.Vector3(0, 0, 1).applyQuaternion(bodyQ).normalize();
-  const ang = Math.atan2(zSCinECI.dot(eastPerp), zSCinECI.dot(northPerp)) / DEG;
-  return wrap180(-ang);
+  const ang = Math.atan2(-zSCinECI.dot(zeroRoll.y), zSCinECI.dot(zeroRoll.z)) / DEG;
+  return wrap180(ang);
 }
