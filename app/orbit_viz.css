@@ -909,6 +909,278 @@ body.dragging #drop-overlay {
 .sun-angle-reference-45 { stroke: #ffd36e; }
 .sun-angle-reference-90 { stroke: #ff8c8c; }
 
+.thermal-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.panel-sun-chart-grid {
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr);
+}
+
+.thermal-chart-block {
+  min-width: 0;
+}
+
+.thermal-chart-block h3 {
+  margin: 2px 0 8px;
+  color: #b9c7db;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.thermal-chart-svg {
+  display: block;
+  width: 100%;
+  background: #0b1220;
+  border: 1px solid rgba(37, 49, 74, 0.9);
+  border-radius: 5px;
+}
+
+.panel-face-map {
+  max-height: 440px;
+}
+
+.panel-face-background {
+  fill: #101a2b;
+}
+
+.panel-face-ring,
+.panel-face-axis {
+  fill: none;
+  stroke: rgba(184, 200, 222, 0.42);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.panel-face-ring {
+  stroke-dasharray: 4 4;
+}
+
+.panel-face-outline {
+  fill: none;
+  stroke: #8292aa;
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.panel-face-axis-label {
+  fill: #f4f8ff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.panel-face-ring-label,
+.panel-face-rim-label,
+.panel-face-center-label {
+  fill: #d9e2ef;
+  font-size: 10px;
+  paint-order: stroke;
+  stroke: #0b1220;
+  stroke-width: 3px;
+  pointer-events: none;
+}
+
+.panel-face-center-label {
+  font-weight: 700;
+}
+
+.panel-face-summary {
+  display: flex;
+  justify-content: center;
+  gap: 22px;
+  margin-top: 7px;
+  color: #91a1b8;
+  font-size: 11px;
+}
+
+.panel-face-summary strong {
+  color: #f3f7fc;
+}
+
+.body-face-map {
+  min-height: 330px;
+  max-height: 470px;
+}
+
+.thermal-component-block {
+  margin-top: 18px;
+}
+
+.thermal-component-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.thermal-component-head h3 {
+  margin: 0;
+  color: #b9c7db;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.thermal-tabs {
+  display: inline-flex;
+  border: 1px solid #34415a;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.thermal-tab {
+  min-width: 68px;
+  border: 0;
+  border-right: 1px solid #34415a;
+  border-radius: 0;
+  background: #0b1220;
+  color: #8fa0b8;
+  padding: 6px 12px;
+  font-size: 11px;
+}
+
+.thermal-tab:last-child {
+  border-right: 0;
+}
+
+.thermal-tab:hover {
+  background: #142038;
+  color: #dce6f4;
+}
+
+.thermal-tab.is-active {
+  background: #24436f;
+  color: #ffffff;
+}
+
+.thermal-component-chart {
+  min-height: 220px;
+  max-height: 290px;
+}
+
+.thermal-geometry-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.thermal-grid-line {
+  fill: none;
+  stroke: #34415a;
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.thermal-axis-label {
+  fill: #8292aa;
+  font-size: 10px;
+}
+
+.thermal-axis-title {
+  fill: #aebbd0;
+  font-size: 11px;
+}
+
+.thermal-heat-cell {
+  stroke: rgba(11, 18, 32, 0.65);
+  stroke-width: 0.5;
+}
+
+.thermal-heat-cell:hover {
+  stroke: #f4f8ff;
+  stroke-width: 1.5;
+}
+
+.thermal-component-line {
+  fill: none;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.body-face-background {
+  fill: #101a2b;
+}
+
+.body-face-outline {
+  fill: none;
+  stroke: #50617d;
+  stroke-width: 1.2;
+  pointer-events: none;
+}
+
+.body-face-label {
+  fill: #f4f8ff;
+  font-size: 12px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: #0b1220;
+  stroke-width: 3px;
+}
+
+.body-face-axis-label {
+  fill: #bac7d9;
+  font-size: 9px;
+  paint-order: stroke;
+  stroke: #0b1220;
+  stroke-width: 3px;
+}
+
+.thermal-component-legend {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.thermal-eclipse-band {
+  fill: rgba(139, 124, 255, 0.13);
+}
+
+.thermal-mode-strip {
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.thermal-hover-overlay {
+  fill: transparent;
+  cursor: crosshair;
+}
+
+.thermal-hover-crosshair {
+  stroke: #e6edf8;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  pointer-events: none;
+}
+
+.thermal-hover-dot,
+.thermal-hover-tooltip {
+  pointer-events: none;
+}
+
+.thermal-hover-dot {
+  stroke: #0b1220;
+  stroke-width: 2;
+}
+
+.thermal-hover-tooltip rect {
+  fill: rgba(7, 12, 22, 0.96);
+  stroke: #50617d;
+}
+
+.thermal-hover-tooltip text {
+  fill: #e6edf8;
+  font-size: 10px;
+}
+
+#surface-exposure-table table {
+  font-size: 11px;
+  min-width: 1280px;
+}
+
+#surface-exposure-table th[title] {
+  cursor: help;
+}
+
 .time-bar-row {
   display: grid;
   grid-template-columns: 130px minmax(120px, 1fr) 145px;
@@ -1149,6 +1421,12 @@ td.num {
   .stats-columns {
     grid-template-columns: 1fr;
   }
+
+  .panel-sun-chart-grid,
+  .body-face-chart-grid {
+    grid-template-columns: 1fr;
+  }
+
 }
 
 @media (max-width: 720px) {
@@ -1207,6 +1485,24 @@ td.num {
 
   .sun-angle-chart {
     min-height: 210px;
+  }
+
+  .thermal-geometry-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .thermal-chart-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .thermal-component-chart,
+  .body-face-map {
+    min-height: 190px;
+  }
+
+  .thermal-component-head {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .gap-class-row {

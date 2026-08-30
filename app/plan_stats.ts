@@ -1,7 +1,10 @@
 import {
   buildPlanStats,
+  type BodyFaceDwellBin,
+  type BodyDirectionSample,
   type ConsistencyWorst,
   type IntegrityFinding,
+  type PanelSunAngleSummary,
   type PlanStats,
 } from "../src/plan_stats";
 import type { VizData } from "../src/types";
@@ -427,13 +430,238 @@ function niceAxisMaximum(value: number): number {
   return niceFraction * exponent;
 }
 
+function vectorLabel(vector: [number, number, number] | null, digits = 2): string {
+  return vector ? `[${vector.map((value) => value.toFixed(digits)).join(", ")}]` : "unavailable";
+}
+
+function heatColor(source: "sun" | "earth", fraction: number): string {
+  const intensity = Math.max(0, Math.min(1, Math.sqrt(fraction)));
+  const [r, g, b] = source === "sun" ? [241, 186, 74] : [73, 190, 210];
+  return `rgba(${r}, ${g}, ${b}, ${0.1 + 0.9 * intensity})`;
+}
+
+function bodyAxisLabel(vector: [number, number, number] | null): string | null {
+  if (!vector) return null;
+  const axes = ["X", "Y", "Z"];
+  const index = vector.findIndex((value) => Math.abs(Math.abs(value) - 1) < 1e-9);
+  if (index < 0 || vector.some((value, candidate) => candidate !== index && Math.abs(value) > 1e-9)) {
+    return null;
+  }
+  return `${vector[index] < 0 ? "-" : "+"}${axes[index]}`;
+}
+
+function oppositeAxisLabel(label: string): string {
+  return `${label.startsWith("-") ? "+" : "-"}${label.slice(1)}`;
+}
+
+function renderPanelSunFaceMap(summary: PanelSunAngleSummary): void {
+  const root = mustEl<HTMLElement>("panel-sun-direction-heatmap");
+  clear(root);
+  const occupiedBins = summary.frontFaceBins.filter((bin) => bin.sunlitDurationSec > 0);
+  if (occupiedBins.length === 0 && summary.backsideSunlitSec <= 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No front-side sunlight intervals are available.";
+    root.append(empty);
+    return;
+  }
+
+  const width = 560;
+  const height = 440;
+  const centerX = 280;
+  const centerY = 172;
+  const radius = 140;
+  const maxEquivalent = occupiedBins.length > 0 ? Math.max(...occupiedBins.map((bin) => bin.equivalentSunSec)) : 0;
+  const maxDuration = occupiedBins.length > 0 ? Math.max(...occupiedBins.map((bin) => bin.sunlitDurationSec)) : 0;
+  const colorMaximum = Math.max(1, maxEquivalent > 0 ? maxEquivalent : maxDuration);
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.classList.add("thermal-chart-svg", "panel-face-map");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute(
+    "aria-label",
+    "Sun direction projected onto the front of the solar panel; center is face-on and the rim is grazing incidence",
+  );
+
+  const definitions = document.createElementNS(SVG_NS, "defs");
+  const clipPath = document.createElementNS(SVG_NS, "clipPath");
+  clipPath.setAttribute("id", "panel-face-map-clip");
+  const clipCircle = document.createElementNS(SVG_NS, "circle");
+  clipCircle.setAttribute("cx", String(centerX));
+  clipCircle.setAttribute("cy", String(centerY));
+  clipCircle.setAttribute("r", String(radius));
+  clipPath.append(clipCircle);
+  definitions.append(clipPath);
+  svg.append(definitions);
+
+  const background = document.createElementNS(SVG_NS, "circle");
+  background.setAttribute("cx", String(centerX));
+  background.setAttribute("cy", String(centerY));
+  background.setAttribute("r", String(radius));
+  background.setAttribute("class", "panel-face-background");
+  svg.append(background);
+
+  occupiedBins.forEach((bin) => {
+    const rect = document.createElementNS(SVG_NS, "rect");
+    rect.setAttribute("x", String(centerX + bin.uMin * radius));
+    rect.setAttribute("y", String(centerY - bin.vMax * radius));
+    rect.setAttribute("width", String((bin.uMax - bin.uMin) * radius));
+    rect.setAttribute("height", String((bin.vMax - bin.vMin) * radius));
+    const colorValue = maxEquivalent > 0 ? bin.equivalentSunSec : bin.sunlitDurationSec;
+    rect.setAttribute("fill", heatColor("sun", colorValue / colorMaximum));
+    rect.setAttribute("class", "thermal-heat-cell");
+    rect.setAttribute("clip-path", "url(#panel-face-map-clip)");
+    const uCenter = (bin.uMin + bin.uMax) / 2;
+    const vCenter = (bin.vMin + bin.vMax) / 2;
+    const incidenceDeg =
+      (Math.asin(Math.min(1, Math.hypot(uCenter, vCenter))) * 180) / Math.PI;
+    const title = document.createElementNS(SVG_NS, "title");
+    title.textContent =
+      `About ${formatDegrees(incidenceDeg, 0)} from face-on: ` +
+      `${formatSeconds(bin.sunlitDurationSec)} dwell, ` +
+      `${formatSeconds(bin.equivalentSunSec)} equivalent exposure`;
+    rect.append(title);
+    svg.append(rect);
+  });
+
+  [30, 60].forEach((angle) => {
+    const ringRadius = Math.sin((angle * Math.PI) / 180) * radius;
+    const ring = document.createElementNS(SVG_NS, "circle");
+    ring.setAttribute("cx", String(centerX));
+    ring.setAttribute("cy", String(centerY));
+    ring.setAttribute("r", String(ringRadius));
+    ring.setAttribute("class", "panel-face-ring");
+    svg.append(ring);
+    const label = document.createElementNS(SVG_NS, "text");
+    label.setAttribute("x", String(centerX + ringRadius / Math.sqrt(2) + 4));
+    label.setAttribute("y", String(centerY - ringRadius / Math.sqrt(2) - 3));
+    label.setAttribute("class", "panel-face-ring-label");
+    label.textContent = `${angle}°`;
+    svg.append(label);
+  });
+
+  const outline = document.createElementNS(SVG_NS, "circle");
+  outline.setAttribute("cx", String(centerX));
+  outline.setAttribute("cy", String(centerY));
+  outline.setAttribute("r", String(radius));
+  outline.setAttribute("class", "panel-face-outline");
+  svg.append(outline);
+
+  const uLabel = bodyAxisLabel(summary.panelBasisUSc) ?? "+U";
+  const vLabel = bodyAxisLabel(summary.panelBasisVSc) ?? "+V";
+  const axes: Array<[number, number, number, number]> = [
+    [centerX - radius, centerY, centerX + radius, centerY],
+    [centerX, centerY - radius, centerX, centerY + radius],
+  ];
+  axes.forEach(([x1, y1, x2, y2]) => {
+    const line = document.createElementNS(SVG_NS, "line");
+    line.setAttribute("x1", String(x1));
+    line.setAttribute("x2", String(x2));
+    line.setAttribute("y1", String(y1));
+    line.setAttribute("y2", String(y2));
+    line.setAttribute("class", "panel-face-axis");
+    svg.append(line);
+  });
+
+  const axisLabels: Array<[number, number, string, string]> = [
+    [centerX + radius + 13, centerY + 4, uLabel, "start"],
+    [centerX - radius - 13, centerY + 4, oppositeAxisLabel(uLabel), "end"],
+    [centerX, centerY - radius - 12, vLabel, "middle"],
+    [centerX, centerY + radius + 20, oppositeAxisLabel(vLabel), "middle"],
+  ];
+  axisLabels.forEach(([x, y, labelText, anchor]) => {
+    const label = document.createElementNS(SVG_NS, "text");
+    label.setAttribute("x", String(x));
+    label.setAttribute("y", String(y));
+    label.setAttribute("text-anchor", anchor);
+    label.setAttribute("class", "panel-face-axis-label");
+    label.textContent = labelText;
+    svg.append(label);
+  });
+
+  const centerLabel = document.createElementNS(SVG_NS, "text");
+  centerLabel.setAttribute("x", String(centerX));
+  centerLabel.setAttribute("y", String(centerY - 5));
+  centerLabel.setAttribute("text-anchor", "middle");
+  centerLabel.setAttribute("class", "panel-face-center-label");
+  const centerLine1 = document.createElementNS(SVG_NS, "tspan");
+  centerLine1.setAttribute("x", String(centerX));
+  centerLine1.textContent = "0° · face-on";
+  const centerLine2 = document.createElementNS(SVG_NS, "tspan");
+  centerLine2.setAttribute("x", String(centerX));
+  centerLine2.setAttribute("dy", "13");
+  centerLine2.textContent = "maximum input";
+  centerLabel.append(centerLine1, centerLine2);
+  svg.append(centerLabel);
+
+  const rimLabel = document.createElementNS(SVG_NS, "text");
+  rimLabel.setAttribute("x", String(centerX + radius * 0.76));
+  rimLabel.setAttribute("y", String(centerY + radius * 0.7));
+  rimLabel.setAttribute("class", "panel-face-rim-label");
+  rimLabel.textContent = "90° · grazing";
+  svg.append(rimLabel);
+
+  const scaleWidth = 170;
+  const scaleX = (width - scaleWidth) / 2;
+  const scaleY = 364;
+  for (let index = 0; index < 40; index++) {
+    const rect = document.createElementNS(SVG_NS, "rect");
+    rect.setAttribute("x", String(scaleX + (index / 40) * scaleWidth));
+    rect.setAttribute("y", String(scaleY));
+    rect.setAttribute("width", String(scaleWidth / 40 + 0.2));
+    rect.setAttribute("height", "8");
+    rect.setAttribute("fill", heatColor("sun", index / 39));
+    svg.append(rect);
+  }
+
+  const scaleTitle = document.createElementNS(SVG_NS, "text");
+  scaleTitle.setAttribute("x", String(width / 2));
+  scaleTitle.setAttribute("y", String(scaleY - 9));
+  scaleTitle.setAttribute("text-anchor", "middle");
+  scaleTitle.setAttribute("class", "thermal-axis-title");
+  scaleTitle.textContent = "Equivalent direct-Sun exposure per cell";
+  svg.append(scaleTitle);
+  const scaleMin = document.createElementNS(SVG_NS, "text");
+  scaleMin.setAttribute("x", String(scaleX));
+  scaleMin.setAttribute("y", String(scaleY + 22));
+  scaleMin.setAttribute("class", "thermal-axis-label");
+  scaleMin.textContent = "0";
+  svg.append(scaleMin);
+  const scaleMax = document.createElementNS(SVG_NS, "text");
+  scaleMax.setAttribute("x", String(scaleX + scaleWidth));
+  scaleMax.setAttribute("y", String(scaleY + 22));
+  scaleMax.setAttribute("text-anchor", "end");
+  scaleMax.setAttribute("class", "thermal-axis-label");
+  scaleMax.textContent = formatSeconds(maxEquivalent);
+  svg.append(scaleMax);
+  root.append(svg);
+
+  const frontSideSunlitSec = occupiedBins.reduce((total, bin) => total + bin.sunlitDurationSec, 0);
+  const exposureSummary = document.createElement("div");
+  exposureSummary.className = "panel-face-summary";
+  [
+    ["Front side", formatSeconds(frontSideSunlitSec)],
+    ["Behind panel", formatSeconds(summary.backsideSunlitSec)],
+  ].forEach(([labelText, valueText]) => {
+    const item = document.createElement("span");
+    item.append(text(`${labelText}: `));
+    const value = document.createElement("strong");
+    value.textContent = valueText;
+    item.append(value);
+    exposureSummary.append(item);
+  });
+  root.append(exposureSummary);
+}
+
 function renderPanelSunAngle(stats: PlanStats): void {
   const summary = stats.panelSunAngle;
   const context = mustEl<HTMLElement>("panel-sun-angle-context");
   const summaryRoot = mustEl<HTMLElement>("panel-sun-angle-summary");
   const chartRoot = mustEl<HTMLElement>("panel-sun-angle-histogram");
+  const directionRoot = mustEl<HTMLElement>("panel-sun-direction-heatmap");
   clear(summaryRoot);
   clear(chartRoot);
+  clear(directionRoot);
   context.textContent = panelDirectionLabel(summary.panelNormalSc);
 
   if (!summary.available) {
@@ -441,6 +669,9 @@ function renderPanelSunAngle(stats: PlanStats): void {
     empty.className = "empty-state";
     empty.textContent = `Histogram unavailable: ${summary.unavailableReason ?? "required telemetry is missing"}.`;
     chartRoot.append(empty);
+    const directionEmpty = empty.cloneNode(true) as HTMLElement;
+    directionEmpty.textContent = `Direction map unavailable: ${summary.unavailableReason ?? "required telemetry is missing"}.`;
+    directionRoot.append(directionEmpty);
     return;
   }
 
@@ -448,8 +679,8 @@ function renderPanelSunAngle(stats: PlanStats): void {
     ["Median", formatDegrees(summary.medianDeg, 1)],
     ["Mean", formatDegrees(summary.meanDeg, 1)],
     ["Range", `${formatDegrees(summary.minDeg, 1)} to ${formatDegrees(summary.maxDeg, 1)}`],
-    ["At or below 45°", `${percent(summary.within45Sec, summary.durationSec)} · ${formatSeconds(summary.within45Sec)}`],
-    ["At or below 90°", `${percent(summary.within90Sec, summary.durationSec)} · ${formatSeconds(summary.within90Sec)}`],
+    ["Within 45° of face-on", `${percent(summary.within45Sec, summary.durationSec)} · ${formatSeconds(summary.within45Sec)}`],
+    ["On panel-facing side", `${percent(summary.within90Sec, summary.durationSec)} · ${formatSeconds(summary.within90Sec)}`],
   ].forEach(([labelText, valueText]) => {
     const item = document.createElement("div");
     item.className = "sun-angle-stat";
@@ -569,7 +800,7 @@ function renderPanelSunAngle(stats: PlanStats): void {
   xTitle.setAttribute("x", String(margin.left + plotWidth / 2));
   xTitle.setAttribute("y", String(height - 3));
   xTitle.setAttribute("text-anchor", "middle");
-  xTitle.textContent = "Sun angle to panel normal";
+  xTitle.textContent = "Angle from face-on (0° direct, 90° edge-on)";
   svg.append(xTitle);
   const yTitle = document.createElementNS(SVG_NS, "text");
   yTitle.setAttribute("class", "sun-angle-axis-title");
@@ -578,6 +809,535 @@ function renderPanelSunAngle(stats: PlanStats): void {
   yTitle.textContent = "Duration (minutes)";
   svg.append(yTitle);
   chartRoot.append(svg);
+  renderPanelSunFaceMap(summary);
+}
+
+const BODY_FACE_LAYOUT: Array<{
+  face: string;
+  column: number;
+  row: number;
+  uLabel: string;
+  vLabel: string;
+}> = [
+  { face: "+Z", column: 1, row: 0, uLabel: "+X", vLabel: "+Y" },
+  { face: "-X", column: 0, row: 1, uLabel: "-Y", vLabel: "+Z" },
+  { face: "+Y", column: 1, row: 1, uLabel: "-X", vLabel: "+Z" },
+  { face: "+X", column: 2, row: 1, uLabel: "+Y", vLabel: "+Z" },
+  { face: "-Y", column: 3, row: 1, uLabel: "+X", vLabel: "+Z" },
+  { face: "-Z", column: 1, row: 2, uLabel: "+X", vLabel: "-Y" },
+];
+
+function renderBodyFaceMap(
+  rootId: string,
+  bins: BodyFaceDwellBin[],
+  source: "sun" | "earth",
+  sharedMaxDuration: number,
+): void {
+  const root = mustEl<HTMLElement>(rootId);
+  clear(root);
+  if (bins.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = source === "sun" ? "No sunlit direction intervals are available." : "No Earth-direction intervals are available.";
+    root.append(empty);
+    return;
+  }
+
+  const width = 640;
+  const height = 460;
+  const faceSize = 118;
+  const gap = 8;
+  const originX = 68;
+  const originY = 14;
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.classList.add("thermal-chart-svg", "body-face-map");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute(
+    "aria-label",
+    `${source === "sun" ? "Sunlit Sun" : "Earth-center"} direction dwell in spacecraft body coordinates`,
+  );
+
+  BODY_FACE_LAYOUT.forEach((layout) => {
+    const faceX = originX + layout.column * (faceSize + gap);
+    const faceY = originY + layout.row * (faceSize + gap);
+    const background = document.createElementNS(SVG_NS, "rect");
+    background.setAttribute("x", String(faceX));
+    background.setAttribute("y", String(faceY));
+    background.setAttribute("width", String(faceSize));
+    background.setAttribute("height", String(faceSize));
+    background.setAttribute("class", "body-face-background");
+    svg.append(background);
+
+    bins.filter((bin) => bin.face === layout.face).forEach((bin) => {
+      const rect = document.createElementNS(SVG_NS, "rect");
+      rect.setAttribute("x", String(faceX + ((bin.uMin + 1) / 2) * faceSize));
+      rect.setAttribute("y", String(faceY + ((1 - bin.vMax) / 2) * faceSize));
+      rect.setAttribute("width", String(((bin.uMax - bin.uMin) / 2) * faceSize + 0.2));
+      rect.setAttribute("height", String(((bin.vMax - bin.vMin) / 2) * faceSize + 0.2));
+      rect.setAttribute("fill", heatColor(source, bin.durationSec / sharedMaxDuration));
+      rect.setAttribute("class", "thermal-heat-cell");
+      const title = document.createElementNS(SVG_NS, "title");
+      title.textContent =
+        `${layout.face} face, ${layout.uLabel} ${bin.uMin.toFixed(1)} to ${bin.uMax.toFixed(1)}, ` +
+        `${layout.vLabel} ${bin.vMin.toFixed(1)} to ${bin.vMax.toFixed(1)}: ${formatSeconds(bin.durationSec)}`;
+      rect.append(title);
+      svg.append(rect);
+    });
+
+    const outline = document.createElementNS(SVG_NS, "rect");
+    outline.setAttribute("x", String(faceX));
+    outline.setAttribute("y", String(faceY));
+    outline.setAttribute("width", String(faceSize));
+    outline.setAttribute("height", String(faceSize));
+    outline.setAttribute("class", "body-face-outline");
+    svg.append(outline);
+    const faceLabel = document.createElementNS(SVG_NS, "text");
+    faceLabel.setAttribute("x", String(faceX + 6));
+    faceLabel.setAttribute("y", String(faceY + 15));
+    faceLabel.setAttribute("class", "body-face-label");
+    faceLabel.textContent = layout.face;
+    svg.append(faceLabel);
+    const axes = document.createElementNS(SVG_NS, "text");
+    axes.setAttribute("x", String(faceX + faceSize - 5));
+    axes.setAttribute("y", String(faceY + faceSize - 6));
+    axes.setAttribute("text-anchor", "end");
+    axes.setAttribute("class", "body-face-axis-label");
+    axes.textContent = `→${layout.uLabel}  ↑${layout.vLabel}`;
+    svg.append(axes);
+  });
+
+  const title = document.createElementNS(SVG_NS, "text");
+  title.setAttribute("x", String(width / 2));
+  title.setAttribute("y", String(height - 25));
+  title.setAttribute("text-anchor", "middle");
+  title.setAttribute("class", "thermal-axis-title");
+  title.textContent =
+    `${source === "sun" ? "Sunlit Sun" : "Earth center"} dwell · shared scale 0 to ${formatSeconds(sharedMaxDuration)} per bin`;
+  svg.append(title);
+  if (source === "earth") {
+    const qualifier = document.createElementNS(SVG_NS, "text");
+    qualifier.setAttribute("x", String(width / 2));
+    qualifier.setAttribute("y", String(height - 8));
+    qualifier.setAttribute("text-anchor", "middle");
+    qualifier.setAttribute("class", "thermal-axis-label");
+    qualifier.textContent = "Map shows Earth center; surface view factors below integrate the finite Earth disk";
+    svg.append(qualifier);
+  }
+  root.append(svg);
+}
+
+const BODY_COMPONENT_COLORS = ["#f1ba4a", "#49bed2", "#d66bff"];
+const BODY_COMPONENT_DASHES = ["", "7 4", "2 3"];
+
+function componentPath(
+  samples: BodyDirectionSample[],
+  source: "sun" | "earth",
+  component: number,
+  xAt: (time: number) => number,
+  yAt: (value: number) => number,
+): string {
+  let path = "";
+  let previousEnd: number | null = null;
+  samples.forEach((sample) => {
+    const value = (source === "sun" ? sample.sunBody : sample.earthBody)[component];
+    const command = previousEnd !== null && Math.abs(sample.time - previousEnd) <= 1e-6 ? "L" : "M";
+    path += `${command} ${xAt(sample.time).toFixed(2)} ${yAt(value).toFixed(2)} `;
+    previousEnd = sample.time + sample.durationSec;
+  });
+  return path.trim();
+}
+
+function renderDirectionComponents(
+  rootId: string,
+  samples: BodyDirectionSample[],
+  source: "sun" | "earth",
+): void {
+  const root = mustEl<HTMLElement>(rootId);
+  clear(root);
+  if (samples.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No body-direction samples are available.";
+    root.append(empty);
+    return;
+  }
+
+  const width = 1100;
+  const height = 280;
+  const margin = { top: 28, right: 22, bottom: 42, left: 50 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const start = samples[0].time;
+  const end = samples.at(-1)!.time + samples.at(-1)!.durationSec;
+  const duration = Math.max(1, end - start);
+  const xAt = (time: number): number => margin.left + ((time - start) / duration) * plotWidth;
+  const yAt = (value: number): number => margin.top + ((1 - value) / 2) * plotHeight;
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.classList.add("thermal-chart-svg", "thermal-component-chart");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `${source === "sun" ? "Sun" : "Earth"} body-frame X, Y, and Z direction cosines over time`);
+
+  if (source === "sun") {
+    let eclipseStart: number | null = null;
+    samples.forEach((sample, index) => {
+      if (sample.inEclipse && eclipseStart === null) eclipseStart = sample.time;
+      const next = samples[index + 1];
+      const closes = sample.inEclipse && (!next || !next.inEclipse || Math.abs(next.time - (sample.time + sample.durationSec)) > 1e-6);
+      if (closes && eclipseStart !== null) {
+        const rect = document.createElementNS(SVG_NS, "rect");
+        rect.setAttribute("x", String(xAt(eclipseStart)));
+        rect.setAttribute("y", String(margin.top));
+        rect.setAttribute("width", String(Math.max(0, xAt(sample.time + sample.durationSec) - xAt(eclipseStart))));
+        rect.setAttribute("height", String(plotHeight));
+        rect.setAttribute("class", "thermal-eclipse-band");
+        svg.append(rect);
+        eclipseStart = null;
+      }
+    });
+  }
+
+  samples.forEach((sample) => {
+    const rect = document.createElementNS(SVG_NS, "rect");
+    rect.setAttribute("x", String(xAt(sample.time)));
+    rect.setAttribute("y", String(margin.top + plotHeight - 4));
+    rect.setAttribute("width", String(Math.max(0.5, xAt(sample.time + sample.durationSec) - xAt(sample.time))));
+    rect.setAttribute("height", "4");
+    rect.setAttribute("fill", PANEL_SUN_MODE_COLORS[sample.mode] ?? PANEL_SUN_MODE_COLORS.OTHER);
+    rect.setAttribute("class", "thermal-mode-strip");
+    svg.append(rect);
+  });
+
+  [-1, -0.5, 0, 0.5, 1].forEach((value) => {
+    const y = yAt(value);
+    const line = document.createElementNS(SVG_NS, "line");
+    line.setAttribute("x1", String(margin.left));
+    line.setAttribute("x2", String(margin.left + plotWidth));
+    line.setAttribute("y1", String(y));
+    line.setAttribute("y2", String(y));
+    line.setAttribute("class", "thermal-grid-line");
+    svg.append(line);
+    const label = document.createElementNS(SVG_NS, "text");
+    label.setAttribute("x", String(margin.left - 8));
+    label.setAttribute("y", String(y + 4));
+    label.setAttribute("text-anchor", "end");
+    label.setAttribute("class", "thermal-axis-label");
+    label.textContent = value.toFixed(value === 0 ? 0 : 1);
+    svg.append(label);
+  });
+
+  [0, 0.25, 0.5, 0.75, 1].forEach((fraction) => {
+    const x = margin.left + fraction * plotWidth;
+    const label = document.createElementNS(SVG_NS, "text");
+    label.setAttribute("x", String(x));
+    label.setAttribute("y", String(height - 20));
+    label.setAttribute("text-anchor", "middle");
+    label.setAttribute("class", "thermal-axis-label");
+    label.textContent = `+${((duration * fraction) / 3600).toFixed(1)}h`;
+    svg.append(label);
+  });
+
+  ["X", "Y", "Z"].forEach((axis, component) => {
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", componentPath(samples, source, component, xAt, yAt));
+    path.setAttribute("stroke", BODY_COMPONENT_COLORS[component]);
+    if (BODY_COMPONENT_DASHES[component]) {
+      path.setAttribute("stroke-dasharray", BODY_COMPONENT_DASHES[component]);
+    }
+    path.setAttribute("class", "thermal-component-line");
+    svg.append(path);
+    const legendX = margin.left + component * 62;
+    const legendLine = document.createElementNS(SVG_NS, "line");
+    legendLine.setAttribute("x1", String(legendX));
+    legendLine.setAttribute("x2", String(legendX + 18));
+    legendLine.setAttribute("y1", "15");
+    legendLine.setAttribute("y2", "15");
+    legendLine.setAttribute("stroke", BODY_COMPONENT_COLORS[component]);
+    legendLine.setAttribute("stroke-width", "2");
+    if (BODY_COMPONENT_DASHES[component]) {
+      legendLine.setAttribute("stroke-dasharray", BODY_COMPONENT_DASHES[component]);
+    }
+    svg.append(legendLine);
+    const legend = document.createElementNS(SVG_NS, "text");
+    legend.setAttribute("x", String(legendX + 23));
+    legend.setAttribute("y", "18");
+    legend.setAttribute("fill", BODY_COMPONENT_COLORS[component]);
+    legend.setAttribute("class", "thermal-component-legend");
+    legend.textContent = axis;
+    svg.append(legend);
+  });
+
+  if (source === "sun") {
+    const eclipseSwatch = document.createElementNS(SVG_NS, "rect");
+    eclipseSwatch.setAttribute("x", "242");
+    eclipseSwatch.setAttribute("y", "9");
+    eclipseSwatch.setAttribute("width", "18");
+    eclipseSwatch.setAttribute("height", "10");
+    eclipseSwatch.setAttribute("class", "thermal-eclipse-band");
+    svg.append(eclipseSwatch);
+    const eclipseLabel = document.createElementNS(SVG_NS, "text");
+    eclipseLabel.setAttribute("x", "266");
+    eclipseLabel.setAttribute("y", "18");
+    eclipseLabel.setAttribute("class", "thermal-axis-label");
+    eclipseLabel.textContent = "Eclipse";
+    svg.append(eclipseLabel);
+  }
+
+  const modeLabel = document.createElementNS(SVG_NS, "text");
+  modeLabel.setAttribute("x", String(width - margin.right));
+  modeLabel.setAttribute("y", "18");
+  modeLabel.setAttribute("text-anchor", "end");
+  modeLabel.setAttribute("class", "thermal-axis-label");
+  modeLabel.textContent = "ACS mode strip along chart baseline";
+  svg.append(modeLabel);
+
+  const yTitle = document.createElementNS(SVG_NS, "text");
+  yTitle.setAttribute("transform", `translate(13 ${margin.top + plotHeight / 2}) rotate(-90)`);
+  yTitle.setAttribute("text-anchor", "middle");
+  yTitle.setAttribute("class", "thermal-axis-title");
+  yTitle.textContent = "Direction cosine";
+  svg.append(yTitle);
+
+  const crosshair = document.createElementNS(SVG_NS, "line");
+  crosshair.setAttribute("y1", String(margin.top));
+  crosshair.setAttribute("y2", String(margin.top + plotHeight));
+  crosshair.setAttribute("class", "thermal-hover-crosshair");
+  crosshair.setAttribute("visibility", "hidden");
+  svg.append(crosshair);
+  const hoverDots = BODY_COMPONENT_COLORS.map((color) => {
+    const dot = document.createElementNS(SVG_NS, "circle");
+    dot.setAttribute("r", "4");
+    dot.setAttribute("fill", color);
+    dot.setAttribute("class", "thermal-hover-dot");
+    dot.setAttribute("visibility", "hidden");
+    svg.append(dot);
+    return dot;
+  });
+  const tooltip = document.createElementNS(SVG_NS, "g");
+  tooltip.setAttribute("class", "thermal-hover-tooltip");
+  tooltip.setAttribute("visibility", "hidden");
+  const tooltipBackground = document.createElementNS(SVG_NS, "rect");
+  tooltipBackground.setAttribute("width", "285");
+  tooltipBackground.setAttribute("height", "48");
+  tooltipBackground.setAttribute("rx", "4");
+  const tooltipLine1 = document.createElementNS(SVG_NS, "text");
+  tooltipLine1.setAttribute("x", "9");
+  tooltipLine1.setAttribute("y", "18");
+  const tooltipLine2 = document.createElementNS(SVG_NS, "text");
+  tooltipLine2.setAttribute("x", "9");
+  tooltipLine2.setAttribute("y", "36");
+  tooltip.append(tooltipBackground, tooltipLine1, tooltipLine2);
+  svg.append(tooltip);
+
+  const overlay = document.createElementNS(SVG_NS, "rect");
+  overlay.setAttribute("x", String(margin.left));
+  overlay.setAttribute("y", String(margin.top));
+  overlay.setAttribute("width", String(plotWidth));
+  overlay.setAttribute("height", String(plotHeight));
+  overlay.setAttribute("class", "thermal-hover-overlay");
+  overlay.addEventListener("pointermove", (event) => {
+    const bounds = svg.getBoundingClientRect();
+    const pointerX = ((event.clientX - bounds.left) / bounds.width) * width;
+    const targetTime = start + ((pointerX - margin.left) / plotWidth) * duration;
+    const sample = samples.reduce((nearest, candidate) =>
+      Math.abs(candidate.time - targetTime) < Math.abs(nearest.time - targetTime) ? candidate : nearest,
+    );
+    const x = xAt(sample.time);
+    const values = source === "sun" ? sample.sunBody : sample.earthBody;
+    crosshair.setAttribute("x1", String(x));
+    crosshair.setAttribute("x2", String(x));
+    crosshair.setAttribute("visibility", "visible");
+    hoverDots.forEach((dot, component) => {
+      dot.setAttribute("cx", String(x));
+      dot.setAttribute("cy", String(yAt(values[component])));
+      dot.setAttribute("visibility", "visible");
+    });
+    const tooltipX = x > width / 2 ? x - 295 : x + 10;
+    tooltip.setAttribute("transform", `translate(${tooltipX} ${margin.top + 8})`);
+    tooltip.setAttribute("visibility", "visible");
+    tooltipLine1.textContent = `${fmtTime(sample.time)} · ${sample.mode}${sample.inEclipse ? " · eclipse" : ""}`;
+    tooltipLine2.textContent = `X ${values[0].toFixed(3)}   Y ${values[1].toFixed(3)}   Z ${values[2].toFixed(3)}`;
+  });
+  overlay.addEventListener("pointerleave", () => {
+    crosshair.setAttribute("visibility", "hidden");
+    hoverDots.forEach((dot) => dot.setAttribute("visibility", "hidden"));
+    tooltip.setAttribute("visibility", "hidden");
+  });
+  svg.append(overlay);
+  root.append(svg);
+}
+
+function renderDirectionComponentTabs(samples: BodyDirectionSample[]): void {
+  const tabs = Array.from(
+    document.querySelectorAll<HTMLButtonElement>("#body-component-tabs .thermal-tab"),
+  );
+  const selectSource = (source: "sun" | "earth"): void => {
+    tabs.forEach((tab) => {
+      const selected = tab.dataset.source === source;
+      tab.classList.toggle("is-active", selected);
+      tab.setAttribute("aria-selected", String(selected));
+    });
+    renderDirectionComponents("body-components-chart", samples, source);
+  };
+  tabs.forEach((tab) => {
+    tab.onclick = () => selectSource(tab.dataset.source === "earth" ? "earth" : "sun");
+  });
+  selectSource("sun");
+}
+
+function exposureCell(
+  valueText: string,
+  fraction: number,
+  source: "sun" | "earth" | "space",
+): HTMLTableCellElement {
+  const td = numberCell(valueText);
+  const [r, g, b] = source === "sun" ? [241, 186, 74] : source === "earth" ? [73, 190, 210] : [139, 124, 255];
+  const intensity = Math.max(0, Math.min(1, Math.sqrt(fraction)));
+  td.style.backgroundColor = `rgba(${r}, ${g}, ${b}, ${0.03 + 0.22 * intensity})`;
+  return td;
+}
+
+function renderThermalGeometry(stats: PlanStats): void {
+  const geometry = stats.thermalGeometry;
+  const summaryRoot = mustEl<HTMLElement>("thermal-geometry-summary");
+  const tableRoot = mustEl<HTMLElement>("surface-exposure-table");
+  clear(summaryRoot);
+  clear(tableRoot);
+
+  if (!geometry.available) {
+    const roots = [
+      summaryRoot,
+      mustEl<HTMLElement>("sun-body-face-map"),
+      mustEl<HTMLElement>("earth-body-face-map"),
+      mustEl<HTMLElement>("body-components-chart"),
+      tableRoot,
+    ];
+    roots.forEach((root) => {
+      clear(root);
+      const empty = document.createElement("div");
+      empty.className = "empty-state";
+      empty.textContent = `Thermal geometry unavailable: ${geometry.unavailableReason ?? "required telemetry is missing"}.`;
+      root.append(empty);
+    });
+    return;
+  }
+
+  [
+    ["Analyzed", `${formatSeconds(geometry.durationSec)} · ${geometry.samples.length} intervals`],
+    ["Sunlit", `${percent(geometry.sunlitSec, geometry.durationSec)} · ${formatSeconds(geometry.sunlitSec)}`],
+    ["Eclipse", `${percent(geometry.eclipseSec, geometry.durationSec)} · ${formatSeconds(geometry.eclipseSec)}`],
+    [
+      "Earth apparent radius",
+      `${formatDegrees(geometry.earthAngularRadiusMeanDeg, 1)} mean · ` +
+        `${formatDegrees(geometry.earthAngularRadiusMinDeg, 1)} to ` +
+        `${formatDegrees(geometry.earthAngularRadiusMaxDeg, 1)}`,
+    ],
+  ].forEach(([labelText, valueText]) => {
+    const item = document.createElement("div");
+    item.className = "sun-angle-stat";
+    const label = document.createElement("span");
+    label.textContent = labelText;
+    const value = document.createElement("strong");
+    value.textContent = valueText;
+    item.append(label, value);
+    summaryRoot.append(item);
+  });
+
+  const sharedMapMaxDuration = Math.max(
+    1,
+    ...geometry.sunDwellBins.map((bin) => bin.durationSec),
+    ...geometry.earthDwellBins.map((bin) => bin.durationSec),
+  );
+  renderBodyFaceMap("sun-body-face-map", geometry.sunDwellBins, "sun", sharedMapMaxDuration);
+  renderBodyFaceMap("earth-body-face-map", geometry.earthDwellBins, "earth", sharedMapMaxDuration);
+  renderDirectionComponentTabs(geometry.samples);
+
+  const rows = geometry.surfaces.map((surface) => {
+    const tr = document.createElement("tr");
+    const name = document.createElement("td");
+    name.textContent = surface.name;
+    const normal = document.createElement("td");
+    normal.className = "num";
+    normal.textContent = vectorLabel(surface.normalSc, 0);
+    const minSunAngle = surface.peakSunCosine > 0
+      ? (Math.acos(Math.max(-1, Math.min(1, surface.peakSunCosine))) * 180) / Math.PI
+      : null;
+    tr.append(
+      name,
+      normal,
+      exposureCell(
+        formatSeconds(surface.directSunEquivalentSec),
+        surface.directSunEquivalentSec / Math.max(1, geometry.sunlitSec),
+        "sun",
+      ),
+      exposureCell(
+        formatSeconds(surface.sunAbove10PercentSec),
+        surface.sunAbove10PercentSec / Math.max(1, geometry.sunlitSec),
+        "sun",
+      ),
+      exposureCell(
+        formatSeconds(surface.sunAbove50PercentSec),
+        surface.sunAbove50PercentSec / Math.max(1, geometry.sunlitSec),
+        "sun",
+      ),
+      exposureCell(
+        formatSeconds(surface.sunAbove90PercentSec),
+        surface.sunAbove90PercentSec / Math.max(1, geometry.sunlitSec),
+        "sun",
+      ),
+      numberCell(formatDegrees(minSunAngle, 1)),
+      exposureCell(
+        formatSeconds(surface.longestAbove10PercentSec),
+        surface.longestAbove10PercentSec / Math.max(1, geometry.sunlitSec),
+        "sun",
+      ),
+      exposureCell(
+        `${(100 * surface.meanEarthViewFactor).toFixed(1)}%`,
+        surface.meanEarthViewFactor,
+        "earth",
+      ),
+      exposureCell(
+        `${(100 * surface.peakEarthViewFactor).toFixed(1)}%`,
+        surface.peakEarthViewFactor,
+        "earth",
+      ),
+      exposureCell(
+        `${(100 * surface.meanDeepSpaceViewFactor).toFixed(1)}%`,
+        surface.meanDeepSpaceViewFactor,
+        "space",
+      ),
+      exposureCell(
+        `${(100 * surface.minimumDeepSpaceViewFactor).toFixed(1)}%`,
+        surface.minimumDeepSpaceViewFactor,
+        "space",
+      ),
+    );
+    return tr;
+  });
+  tableRoot.replaceChildren(
+    table(
+      [
+        "Surface",
+        "Body normal",
+        {
+          label: "Sun eq.",
+          title: "Normal-incidence-equivalent Sun exposure: integral of max(0, normal dot Sun direction) outside eclipse.",
+        },
+        { label: "Load ≥10%", title: "Sunlit dwell with projected direct-Sun load at least 10% of normal incidence." },
+        { label: "Load ≥50%", title: "Sunlit dwell with projected direct-Sun load at least 50% of normal incidence." },
+        { label: "Load ≥90%", title: "Sunlit dwell with projected direct-Sun load at least 90% of normal incidence." },
+        { label: "Best Sun angle", title: "Smallest Sun angle to the surface normal outside eclipse." },
+        { label: "Longest ≥10%", title: "Longest continuous dwell above 10% projected direct-Sun load." },
+        { label: "Mean Earth VF", title: "Duration-weighted radiative view factor to Earth's finite apparent disk." },
+        { label: "Peak Earth VF", title: "Maximum radiative view factor to Earth's finite apparent disk." },
+        { label: "Mean deep-space VF", title: "Mean unobstructed deep-space view factor, 1 minus Earth view factor." },
+        { label: "Min deep-space VF", title: "Minimum unobstructed deep-space view factor, 1 minus peak Earth view factor." },
+      ],
+      rows,
+      "No surface exposure geometry is available.",
+    ),
+  );
 }
 
 function metric(labelText: string, valueText: string, detailText: string): HTMLElement {
@@ -637,7 +1397,9 @@ function renderSlewDistribution(stats: PlanStats): void {
   });
 }
 
-function table(headers: string[], rows: HTMLTableRowElement[], emptyText: string): HTMLElement {
+type TableHeader = string | { label: string; title: string };
+
+function table(headers: TableHeader[], rows: HTMLTableRowElement[], emptyText: string): HTMLElement {
   if (rows.length === 0) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
@@ -652,7 +1414,8 @@ function table(headers: string[], rows: HTMLTableRowElement[], emptyText: string
   const headerRow = document.createElement("tr");
   headers.forEach((header) => {
     const th = document.createElement("th");
-    th.textContent = header;
+    th.textContent = typeof header === "string" ? header : header.label;
+    if (typeof header !== "string") th.title = header.title;
     headerRow.append(th);
   });
   thead.append(headerRow);
@@ -925,6 +1688,10 @@ function statsCsv(stats: PlanStats): string {
           ["executed_soft_constraint_violation_samples", stats.constraintTelemetry.softViolationSamples],
           ["charge_sec", stats.totals.chargeSec],
           ["downlink_MB", stats.totals.downlinkMB],
+          ["thermal_geometry_sec", stats.thermalGeometry.durationSec],
+          ["thermal_sunlit_sec", stats.thermalGeometry.sunlitSec],
+          ["thermal_eclipse_sec", stats.thermalGeometry.eclipseSec],
+          ["earth_apparent_radius_mean_deg", stats.thermalGeometry.earthAngularRadiusMeanDeg],
         ],
       ),
     ],
@@ -954,6 +1721,70 @@ function statsCsv(stats: PlanStats): string {
       csvRows(
         ["target", "type", "start", "duration_sec", "distance_deg"],
         stats.slews.map((row) => [row.target, row.type, fmtTime(row.start), row.durationSec, row.distanceDeg]),
+      ),
+    ],
+    [
+      "surface_exposure_geometry",
+      csvRows(
+        [
+          "surface",
+          "normal_x",
+          "normal_y",
+          "normal_z",
+          "direct_sun_equivalent_sec",
+          "peak_sun_cosine",
+          "sun_above_10_percent_sec",
+          "sun_above_50_percent_sec",
+          "sun_above_90_percent_sec",
+          "longest_sun_above_10_percent_sec",
+          "mean_earth_view_factor",
+          "peak_earth_view_factor",
+          "mean_deep_space_view_factor",
+          "minimum_deep_space_view_factor",
+        ],
+        stats.thermalGeometry.surfaces.map((row) => [
+          row.name,
+          ...row.normalSc,
+          row.directSunEquivalentSec,
+          row.peakSunCosine,
+          row.sunAbove10PercentSec,
+          row.sunAbove50PercentSec,
+          row.sunAbove90PercentSec,
+          row.longestAbove10PercentSec,
+          row.meanEarthViewFactor,
+          row.peakEarthViewFactor,
+          row.meanDeepSpaceViewFactor,
+          row.minimumDeepSpaceViewFactor,
+        ]),
+      ),
+    ],
+    [
+      "body_direction_timeseries",
+      csvRows(
+        [
+          "time_unix",
+          "time_utc",
+          "duration_sec",
+          "mode",
+          "in_eclipse",
+          "sun_body_x",
+          "sun_body_y",
+          "sun_body_z",
+          "earth_body_x",
+          "earth_body_y",
+          "earth_body_z",
+          "earth_angular_radius_deg",
+        ],
+        stats.thermalGeometry.samples.map((row) => [
+          row.time,
+          new Date(row.time * 1000).toISOString(),
+          row.durationSec,
+          row.mode,
+          row.inEclipse,
+          ...row.sunBody,
+          ...row.earthBody,
+          row.earthAngularRadiusDeg,
+        ]),
       ),
     ],
     [
@@ -1017,6 +1848,7 @@ function render(stats: PlanStats): void {
   renderDownlink(stats);
   renderTimelineChart(stats);
   renderPanelSunAngle(stats);
+  renderThermalGeometry(stats);
   renderTimeBars(stats);
   renderScienceSummary(stats);
   renderSlewDistribution(stats);

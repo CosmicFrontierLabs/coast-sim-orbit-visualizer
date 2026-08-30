@@ -86,6 +86,32 @@ The scrubber timeline at the bottom shows PPST observation windows. Drag the sli
 
 Drag a `viz_data.json` file onto the canvas to load data without a running Python backend.
 
+### Thermal attitude geometry
+
+The Plan Statistics page derives duration-weighted thermal geometry from the
+executed inertial-to-body quaternion telemetry. It includes:
+
+- panel Sun-incidence angle and a front-face map showing which body-axis side
+  the Sun comes from;
+- shared-scale Sun and Earth-center cube maps on the six spacecraft body faces;
+- body-frame Sun/Earth direction-cosine time series; and
+- direct-Sun projection, Earth-disk view factor, and complementary clear-sky
+  view factor for each body face and the configured panel normal.
+
+`Sun eq.` is the integral of `max(0, normal dot sun_direction)` outside eclipse,
+expressed as equivalent seconds at normal incidence. Sun dwell is reported at
+10%, 50%, and 90% projected-load thresholds so grazing illumination is not
+presented as full thermal loading. Earth is treated as a finite apparent disk.
+The Earth view factor integrates projected solid angle over that disk; the
+deep-space view factor is its complement and assumes a convex, unobstructed
+surface with no spacecraft self-view.
+
+These are exposure-geometry diagnostics, not predicted heat fluxes or
+temperatures. Applying them thermally requires surface area, absorptivity,
+emissivity, Earth IR/albedo models, internal dissipation, and thermal coupling.
+The JSON and CSV Plan Statistics exports include the per-surface results and
+body-direction time series for downstream analysis.
+
 ## Spacecraft Model Configuration
 
 The public visualizer repo does not own mission spacecraft assets. Mission

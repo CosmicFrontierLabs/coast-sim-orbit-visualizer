@@ -71,11 +71,56 @@
 
       <section class="stats-section">
         <div class="stats-section-head">
-          <h2>Sun Angle to Solar Panel</h2>
+          <h2>Solar Panel Illumination</h2>
           <span id="panel-sun-angle-context"></span>
         </div>
         <div id="panel-sun-angle-summary" class="sun-angle-summary"></div>
-        <div id="panel-sun-angle-histogram"></div>
+        <div class="thermal-chart-grid panel-sun-chart-grid">
+          <div class="thermal-chart-block">
+            <h3>How Directly Sunlight Hits the Panel</h3>
+            <div id="panel-sun-angle-histogram"></div>
+          </div>
+          <div class="thermal-chart-block">
+            <h3>Which Side the Sun Comes From</h3>
+            <div id="panel-sun-direction-heatmap"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="stats-section">
+        <div class="stats-section-head">
+          <h2>Body-Frame Source Direction</h2>
+          <span>Duration-weighted geometry from executed attitude</span>
+        </div>
+        <div id="thermal-geometry-summary" class="sun-angle-summary thermal-geometry-summary"></div>
+        <div class="thermal-chart-grid body-face-chart-grid">
+          <div class="thermal-chart-block">
+            <h3>Sun Direction Cube Map</h3>
+            <div id="sun-body-face-map"></div>
+          </div>
+          <div class="thermal-chart-block">
+            <h3>Earth-Center Direction Cube Map</h3>
+            <div id="earth-body-face-map"></div>
+          </div>
+        </div>
+        <div class="thermal-component-block">
+          <div class="thermal-component-head">
+            <h3>Body Components</h3>
+            <div id="body-component-tabs" class="thermal-tabs" role="tablist" aria-label="Direction source">
+              <button type="button" class="thermal-tab is-active" data-source="sun" role="tab" aria-selected="true" aria-controls="body-components-chart">Sun</button>
+              <button type="button" class="thermal-tab" data-source="earth" role="tab" aria-selected="false" aria-controls="body-components-chart">Earth</button>
+            </div>
+          </div>
+          <div id="body-components-chart" role="tabpanel"></div>
+        </div>
+      </section>
+
+      <section class="stats-section">
+        <div class="stats-section-head">
+          <h2>Surface Exposure Geometry</h2>
+          <span>Projected Sun load and finite Earth-disk/deep-space view factors</span>
+        </div>
+        <div id="surface-exposure-table"></div>
       </section>
 
       <section class="stats-section">

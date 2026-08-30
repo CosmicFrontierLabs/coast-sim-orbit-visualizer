@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { computePanelSunAngle } from "./plan_stats";
+import { computePanelSunAngle, computeThermalGeometry } from "./plan_stats";
 import type { EciVec, VizData } from "./types";
 
 function vizData({
@@ -10,12 +10,16 @@ function vizData({
   quaternions,
   direction = [0, 0, -1],
   modes,
+  positions,
+  eclipses,
 }: {
   times: number[];
   sunvec: EciVec[];
   quaternions: Array<[number, number, number, number]>;
   direction?: EciVec | null;
   modes?: string[];
+  positions?: EciVec[];
+  eclipses?: number[];
 }): VizData {
   const zeros = times.map(() => 0);
   return {
@@ -26,11 +30,11 @@ function vizData({
     },
     ephem: {
       utime: times,
-      posvec: times.map(() => [7000, 0, 0]),
+      posvec: positions ?? times.map(() => [7000, 0, 0]),
       sunvec,
       ramvec: times.map(() => [0, 1, 0]),
       polevec: times.map(() => [0, 0, 1]),
-      ineclipse: zeros,
+      ineclipse: eclipses ?? zeros,
       lat: zeros,
       lon: zeros,
       beta: zeros,
@@ -123,5 +127,166 @@ describe("computePanelSunAngle", () => {
 
     assert.equal(result.available, false);
     assert.match(result.unavailableReason ?? "", /panel direction/);
+  });
+
+  it("maps front-side sunlight onto the panel face", () => {
+    const identity: [number, number, number, number] = [1, 0, 0, 0];
+    const result = computePanelSunAngle(
+      vizData({
+        times: [0, 60],
+        sunvec: [
+          [0, 1, 0],
+          [0, 1, 0],
+        ],
+        quaternions: [identity, identity],
+      }),
+    );
+
+    assert.deepEqual(result.panelBasisUSc, [1, 0, 0]);
+    assert.deepEqual(result.panelBasisVSc, [0, 1, 0]);
+    const bin = result.frontFaceBins.find(
+      (candidate) => candidate.uMin <= 0 && candidate.uMax > 0 && candidate.vMax === 1,
+    );
+    assert.equal(bin?.sunlitDurationSec, 60);
+    assert.ok((bin?.equivalentSunSec ?? Infinity) < 1e-10);
+    assert.equal(result.backsideSunlitSec, 0);
+  });
+
+  it("reports sunlit time behind the panel separately", () => {
+    const identity: [number, number, number, number] = [1, 0, 0, 0];
+    const result = computePanelSunAngle(
+      vizData({
+        times: [0, 60],
+        sunvec: [
+          [0, 0, 1],
+          [0, 0, 1],
+        ],
+        quaternions: [identity, identity],
+      }),
+    );
+
+    assert.equal(result.backsideSunlitSec, 60);
+    assert.equal(
+      result.frontFaceBins.reduce((total, candidate) => total + candidate.sunlitDurationSec, 0),
+      0,
+    );
+  });
+
+  it("excludes eclipse intervals from all panel-illumination summaries", () => {
+    const identity: [number, number, number, number] = [1, 0, 0, 0];
+    const result = computePanelSunAngle(
+      vizData({
+        times: [0, 60, 120],
+        sunvec: [
+          [0, 0, -1],
+          [0, 0, 1],
+          [0, 0, 1],
+        ],
+        quaternions: [identity, identity, identity],
+        eclipses: [1, 0, 0],
+      }),
+    );
+
+    assert.equal(result.samples, 1);
+    assert.equal(result.durationSec, 60);
+    assert.equal(result.meanDeg, 180);
+    assert.equal(result.backsideSunlitSec, 60);
+    assert.equal(
+      result.frontFaceBins.reduce((total, candidate) => total + candidate.sunlitDurationSec, 0),
+      0,
+    );
+  });
+});
+
+describe("computeThermalGeometry", () => {
+  it("reports body-frame source directions and surface view factors", () => {
+    const identity: [number, number, number, number] = [1, 0, 0, 0];
+    const result = computeThermalGeometry(
+      vizData({
+        times: [0, 60],
+        sunvec: [
+          [1, 0, 0],
+          [1, 0, 0],
+        ],
+        quaternions: [identity, identity],
+      }),
+    );
+
+    assert.equal(result.available, true);
+    assert.deepEqual(result.samples[0].sunBody, [1, 0, 0]);
+    assert.deepEqual(result.samples[0].earthBody, [-1, 0, 0]);
+    const plusX = result.surfaces.find((surface) => surface.name === "+X");
+    const minusX = result.surfaces.find((surface) => surface.name === "-X");
+    assert.equal(plusX?.directSunEquivalentSec, 60);
+    assert.equal(plusX?.meanEarthViewFactor, 0);
+    assert.ok(Math.abs((minusX?.meanEarthViewFactor ?? 0) - (6371 / 7000) ** 2) < 1e-12);
+    assert.ok(Math.abs((minusX?.meanDeepSpaceViewFactor ?? 0) - (1 - (6371 / 7000) ** 2)) < 1e-12);
+    assert.equal(result.sunDwellBins[0].face, "+X");
+    assert.equal(result.earthDwellBins[0].face, "-X");
+    assert.equal(result.surfaces.length, 6);
+    assert.equal(result.surfaces.at(-1)?.name, "-Z / solar panel");
+  });
+
+  it("excludes eclipse intervals from direct-Sun exposure and Sun dwell", () => {
+    const identity: [number, number, number, number] = [1, 0, 0, 0];
+    const result = computeThermalGeometry(
+      vizData({
+        times: [0, 60],
+        sunvec: [
+          [1, 0, 0],
+          [1, 0, 0],
+        ],
+        quaternions: [identity, identity],
+        eclipses: [1, 0],
+      }),
+    );
+
+    assert.equal(result.sunlitSec, 0);
+    assert.equal(result.eclipseSec, 60);
+    assert.equal(result.sunDwellBins.length, 0);
+    assert.ok(result.surfaces.every((surface) => surface.directSunEquivalentSec === 0));
+  });
+
+  it("does not join direct-Sun dwell across an intervening cold interval", () => {
+    const identity: [number, number, number, number] = [1, 0, 0, 0];
+    const result = computeThermalGeometry(
+      vizData({
+        times: [0, 60, 180, 240],
+        sunvec: [
+          [1, 0, 0],
+          [-1, 0, 0],
+          [1, 0, 0],
+          [1, 0, 0],
+        ],
+        quaternions: [identity, identity, identity, identity],
+      }),
+    );
+
+    const plusX = result.surfaces.find((surface) => surface.name === "+X");
+    assert.equal(plusX?.sunAbove10PercentSec, 120);
+    assert.equal(plusX?.longestAbove10PercentSec, 60);
+  });
+
+  it("separates projected Sun exposure into load thresholds", () => {
+    const identity: [number, number, number, number] = [1, 0, 0, 0];
+    const yAt = (x: number): number => Math.sqrt(1 - x * x);
+    const result = computeThermalGeometry(
+      vizData({
+        times: [0, 60, 120, 180],
+        sunvec: [
+          [0.05, yAt(0.05), 0],
+          [0.25, yAt(0.25), 0],
+          [0.75, yAt(0.75), 0],
+          [1, 0, 0],
+        ],
+        quaternions: [identity, identity, identity, identity],
+      }),
+    );
+
+    const plusX = result.surfaces.find((surface) => surface.name === "+X");
+    assert.equal(plusX?.sunAbove10PercentSec, 120);
+    assert.equal(plusX?.sunAbove50PercentSec, 60);
+    assert.equal(plusX?.sunAbove90PercentSec, 0);
+    assert.equal(plusX?.longestAbove10PercentSec, 120);
   });
 });
