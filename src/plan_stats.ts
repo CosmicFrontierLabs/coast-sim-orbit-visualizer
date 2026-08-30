@@ -837,10 +837,60 @@ function directionFaceDwellBins(
     });
 }
 
+function positiveAzimuthIntegral(offset: number, amplitude: number): number {
+  if (amplitude <= 0) return 2 * Math.PI * Math.max(0, offset);
+  if (offset >= amplitude) return 2 * Math.PI * offset;
+  if (offset <= -amplitude) return 0;
+  const halfWidth = Math.acos(-offset / amplitude);
+  return 2 * (offset * halfWidth + amplitude * Math.sin(halfWidth));
+}
+
+function adaptiveSimpson(
+  fn: (value: number) => number,
+  lower: number,
+  upper: number,
+  tolerance: number,
+  maxDepth: number,
+): number {
+  const midpoint = (lower + upper) / 2;
+  const fLower = fn(lower);
+  const fMidpoint = fn(midpoint);
+  const fUpper = fn(upper);
+  const whole = ((upper - lower) * (fLower + 4 * fMidpoint + fUpper)) / 6;
+
+  const refine = (
+    start: number,
+    end: number,
+    fStart: number,
+    fMiddle: number,
+    fEnd: number,
+    estimate: number,
+    target: number,
+    depth: number,
+  ): number => {
+    const middle = (start + end) / 2;
+    const leftMiddle = (start + middle) / 2;
+    const rightMiddle = (middle + end) / 2;
+    const fLeftMiddle = fn(leftMiddle);
+    const fRightMiddle = fn(rightMiddle);
+    const left = ((middle - start) * (fStart + 4 * fLeftMiddle + fMiddle)) / 6;
+    const right = ((end - middle) * (fMiddle + 4 * fRightMiddle + fEnd)) / 6;
+    const correction = left + right - estimate;
+    if (depth <= 0 || Math.abs(correction) <= 15 * target) {
+      return left + right + correction / 15;
+    }
+    return refine(start, middle, fStart, fLeftMiddle, fMiddle, left, target / 2, depth - 1) +
+      refine(middle, end, fMiddle, fRightMiddle, fEnd, right, target / 2, depth - 1);
+  };
+
+  return refine(lower, upper, fLower, fMidpoint, fUpper, whole, tolerance, maxDepth);
+}
+
 /**
  * Radiative view factor from a differential flat surface to Earth's apparent
- * disk. Full and hidden disks are analytic; horizon-clipped disks use a small
- * equal-solid-angle quadrature over the spherical cap.
+ * disk. Full and hidden disks are analytic. For a horizon-clipped disk, the
+ * positive projected cosine is integrated analytically around each ring and
+ * adaptively across the disk radius.
  */
 function earthDiskViewFactor(
   normal: THREE.Vector3,
@@ -855,33 +905,18 @@ function earthDiskViewFactor(
     return Math.max(0, Math.min(1, Math.sin(angularRadiusRad) ** 2 * centerCosine));
   }
 
-  const reference = Math.abs(earthCenter.z) < 0.9
-    ? new THREE.Vector3(0, 0, 1)
-    : new THREE.Vector3(1, 0, 0);
-  const u = reference.clone().cross(earthCenter).normalize();
-  const v = earthCenter.clone().cross(u).normalize();
-  const radialSamples = 12;
-  const azimuthSamples = 24;
-  const cosRadius = Math.cos(angularRadiusRad);
-  const solidAngle = 2 * Math.PI * (1 - cosRadius);
-  let projectedCosineSum = 0;
-
-  for (let radialIndex = 0; radialIndex < radialSamples; radialIndex++) {
-    const cosRho = cosRadius + ((1 - cosRadius) * (radialIndex + 0.5)) / radialSamples;
-    const sinRho = Math.sqrt(Math.max(0, 1 - cosRho * cosRho));
-    for (let azimuthIndex = 0; azimuthIndex < azimuthSamples; azimuthIndex++) {
-      const azimuth = (2 * Math.PI * (azimuthIndex + 0.5)) / azimuthSamples;
-      const direction = earthCenter
-        .clone()
-        .multiplyScalar(cosRho)
-        .addScaledVector(u, sinRho * Math.cos(azimuth))
-        .addScaledVector(v, sinRho * Math.sin(azimuth));
-      projectedCosineSum += Math.max(0, normal.dot(direction));
-    }
-  }
-
-  const integral =
-    (solidAngle * projectedCosineSum) / (radialSamples * azimuthSamples);
+  const centerSine = Math.sqrt(Math.max(0, 1 - centerCosine * centerCosine));
+  const integral = adaptiveSimpson(
+    (rho) => {
+      const offset = centerCosine * Math.cos(rho);
+      const amplitude = centerSine * Math.sin(rho);
+      return positiveAzimuthIntegral(offset, amplitude) * Math.sin(rho);
+    },
+    0,
+    angularRadiusRad,
+    1e-10,
+    16,
+  );
   return Math.max(0, Math.min(1, integral / Math.PI));
 }
 

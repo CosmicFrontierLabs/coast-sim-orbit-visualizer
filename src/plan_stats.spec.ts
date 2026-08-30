@@ -49,6 +49,30 @@ function vizData({
   };
 }
 
+function earthViewFactorAtCenterAngle(angleDeg: number, surfaceName: string): number {
+  const angleRad = (angleDeg * Math.PI) / 180;
+  const position: EciVec = [
+    -7000 * Math.cos(angleRad),
+    -7000 * Math.sin(angleRad),
+    0,
+  ];
+  const identity: [number, number, number, number] = [1, 0, 0, 0];
+  const result = computeThermalGeometry(
+    vizData({
+      times: [0, 60],
+      sunvec: [
+        [0, 0, 1],
+        [0, 0, 1],
+      ],
+      positions: [position, position],
+      quaternions: [identity, identity],
+    }),
+  );
+  const surface = result.surfaces.find((candidate) => candidate.name === surfaceName);
+  assert.ok(surface, `missing ${surfaceName} surface`);
+  return surface.meanEarthViewFactor;
+}
+
 describe("computePanelSunAngle", () => {
   it("weights each boundary sample by the following interval duration", () => {
     const identity: [number, number, number, number] = [1, 0, 0, 0];
@@ -245,6 +269,38 @@ describe("computeThermalGeometry", () => {
     assert.equal(result.eclipseSec, 60);
     assert.equal(result.sunDwellBins.length, 0);
     assert.ok(result.surfaces.every((surface) => surface.directSunEquivalentSec === 0));
+  });
+
+  it("integrates a horizon-centered Earth disk symmetrically", () => {
+    const angularRadiusRad = Math.asin(6371 / 7000);
+    const expected =
+      (angularRadiusRad - Math.sin(angularRadiusRad) * Math.cos(angularRadiusRad)) / Math.PI;
+    const plusX = earthViewFactorAtCenterAngle(90, "+X");
+    const minusX = earthViewFactorAtCenterAngle(90, "-X");
+
+    assert.ok(Math.abs(plusX - expected) < 1e-9);
+    assert.ok(Math.abs(minusX - expected) < 1e-9);
+    assert.ok(Math.abs(plusX - minusX) < 1e-12);
+  });
+
+  it("is continuous across full, partial, and hidden Earth-disk boundaries", () => {
+    const angularRadiusDeg = (Math.asin(6371 / 7000) * 180) / Math.PI;
+    const fullBoundaryDeg = 90 - angularRadiusDeg;
+    const hiddenBoundaryDeg = 90 + angularRadiusDeg;
+    const deltaDeg = 0.1;
+
+    const fullSide = earthViewFactorAtCenterAngle(fullBoundaryDeg - deltaDeg, "+X");
+    const partialSide = earthViewFactorAtCenterAngle(fullBoundaryDeg + deltaDeg, "+X");
+    assert.ok(Math.abs(fullSide - partialSide) < 0.002);
+
+    const visibleSliver = earthViewFactorAtCenterAngle(hiddenBoundaryDeg - deltaDeg, "+X");
+    const hiddenBoundary = earthViewFactorAtCenterAngle(hiddenBoundaryDeg, "+X");
+    const hiddenSide = earthViewFactorAtCenterAngle(hiddenBoundaryDeg + deltaDeg, "+X");
+    assert.ok(visibleSliver > 0);
+    assert.ok(visibleSliver < 1e-6);
+    assert.equal(hiddenBoundary, 0);
+    assert.equal(hiddenSide, 0);
+    assert.equal(earthViewFactorAtCenterAngle(180, "+X"), 0);
   });
 
   it("does not join direct-Sun dwell across an intervening cold interval", () => {
