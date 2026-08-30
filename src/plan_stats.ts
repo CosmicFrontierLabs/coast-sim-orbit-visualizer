@@ -170,6 +170,15 @@ export interface PanelSunAngleBin {
   durationSecByMode: Record<string, number>;
 }
 
+export interface PanelSunFaceBin {
+  uMin: number;
+  uMax: number;
+  vMin: number;
+  vMax: number;
+  sunlitDurationSec: number;
+  equivalentSunSec: number;
+}
+
 export interface PanelSunAngleSummary {
   available: boolean;
   unavailableReason: string | null;
@@ -184,6 +193,59 @@ export interface PanelSunAngleSummary {
   within90Sec: number;
   modes: string[];
   bins: PanelSunAngleBin[];
+  panelBasisUSc: [number, number, number] | null;
+  panelBasisVSc: [number, number, number] | null;
+  frontFaceBins: PanelSunFaceBin[];
+  backsideSunlitSec: number;
+}
+
+export interface BodyDirectionSample {
+  time: number;
+  durationSec: number;
+  mode: string;
+  inEclipse: boolean;
+  sunBody: [number, number, number];
+  earthBody: [number, number, number];
+  earthAngularRadiusDeg: number;
+}
+
+export interface BodyFaceDwellBin {
+  face: string;
+  uMin: number;
+  uMax: number;
+  vMin: number;
+  vMax: number;
+  durationSec: number;
+}
+
+export interface SurfaceExposureSummary {
+  name: string;
+  normalSc: [number, number, number];
+  directSunEquivalentSec: number;
+  peakSunCosine: number;
+  sunAbove10PercentSec: number;
+  sunAbove50PercentSec: number;
+  sunAbove90PercentSec: number;
+  longestAbove10PercentSec: number;
+  meanEarthViewFactor: number;
+  peakEarthViewFactor: number;
+  meanDeepSpaceViewFactor: number;
+  minimumDeepSpaceViewFactor: number;
+}
+
+export interface ThermalGeometrySummary {
+  available: boolean;
+  unavailableReason: string | null;
+  samples: BodyDirectionSample[];
+  durationSec: number;
+  sunlitSec: number;
+  eclipseSec: number;
+  earthAngularRadiusMinDeg: number | null;
+  earthAngularRadiusMeanDeg: number | null;
+  earthAngularRadiusMaxDeg: number | null;
+  sunDwellBins: BodyFaceDwellBin[];
+  earthDwellBins: BodyFaceDwellBin[];
+  surfaces: SurfaceExposureSummary[];
 }
 
 export interface IntegrityFinding {
@@ -233,6 +295,7 @@ export interface PlanStats {
   gspExecution: GspExecutionSummary;
   orbitContext: OrbitContextSummary;
   panelSunAngle: PanelSunAngleSummary;
+  thermalGeometry: ThermalGeometrySummary;
   science: ScienceSummary;
   timeline: TimelineChartLane[];
   slewDistribution: SlewDistributionBin[];
@@ -471,12 +534,18 @@ function median(values: number[]): number {
 }
 
 const PANEL_SUN_BIN_WIDTH_DEG = 5;
+const PANEL_SUN_FACE_BIN_WIDTH = 0.125;
+const BODY_FACE_BIN_WIDTH = 0.2;
 const PANEL_SUN_MODE_ORDER = ["SCIENCE", "SLEWING", "CHARGING", "PASS", "IDLE", "OTHER"];
 
 interface WeightedAngleSample {
   angleDeg: number;
+  panelU: number;
+  panelV: number;
+  panelDot: number;
   durationSec: number;
   mode: string;
+  inEclipse: boolean;
 }
 
 function emptyPanelSunAngle(reason: string, panelNormalSc: [number, number, number] | null): PanelSunAngleSummary {
@@ -494,7 +563,31 @@ function emptyPanelSunAngle(reason: string, panelNormalSc: [number, number, numb
     within90Sec: 0,
     modes: [],
     bins: [],
+    panelBasisUSc: null,
+    panelBasisVSc: null,
+    frontFaceBins: [],
+    backsideSunlitSec: 0,
   };
+}
+
+function vectorTuple(value: THREE.Vector3): [number, number, number] {
+  const cleanZero = (component: number): number => (Object.is(component, -0) ? 0 : component);
+  return [cleanZero(value.x), cleanZero(value.y), cleanZero(value.z)];
+}
+
+function panelAzimuthBasis(panel: THREE.Vector3): { u: THREE.Vector3; v: THREE.Vector3 } {
+  const candidates = [
+    new THREE.Vector3(1, 0, 0),
+    new THREE.Vector3(0, 1, 0),
+    new THREE.Vector3(0, 0, 1),
+  ];
+  const reference = candidates.reduce((best, candidate) =>
+    Math.abs(candidate.dot(panel)) < Math.abs(best.dot(panel)) ? candidate : best,
+  );
+  const u = reference.clone().addScaledVector(panel, -reference.dot(panel)).normalize();
+  // This orientation makes +90 degrees align with body +Y for a body -Z panel.
+  const v = u.clone().cross(panel).normalize();
+  return { u, v };
 }
 
 function panelSunMode(data: VizData, entries: WindowRef[], index: number, time: number): string {
@@ -541,6 +634,7 @@ export function computePanelSunAngle(data: VizData): PanelSunAngleSummary {
   }
   panel.normalize();
   const panelNormalSc: [number, number, number] = [panel.x, panel.y, panel.z];
+  const azimuthBasis = panelAzimuthBasis(panel);
 
   const ephem = data.ephem;
   const n = ephem.utime.length;
@@ -573,13 +667,21 @@ export function computePanelSunAngle(data: VizData): PanelSunAngleSummary {
     const sunBody = sun.normalize().applyQuaternion(inertialToBody);
     samples.push({
       angleDeg: angleDeg(sunBody, panel),
+      panelU: sunBody.dot(azimuthBasis.u),
+      panelV: sunBody.dot(azimuthBasis.v),
+      panelDot: sunBody.dot(panel),
       durationSec,
       mode: panelSunMode(data, entries, i, ephem.utime[i]),
+      inEclipse: numericField(ephem.ineclipse[i]) > 0,
     });
   }
 
   if (samples.length === 0) {
     return emptyPanelSunAngle("no valid panel-angle intervals are available", panelNormalSc);
+  }
+  const sunlitSamples = samples.filter((sample) => !sample.inEclipse);
+  if (sunlitSamples.length === 0) {
+    return emptyPanelSunAngle("no sunlit panel-angle intervals are available", panelNormalSc);
   }
 
   const bins: PanelSunAngleBin[] = Array.from({ length: 180 / PANEL_SUN_BIN_WIDTH_DEG }, (_, index) => ({
@@ -588,12 +690,27 @@ export function computePanelSunAngle(data: VizData): PanelSunAngleSummary {
     durationSecByMode: {},
   }));
   const activeModes = new Set<string>();
+  const faceBinsPerAxis = Math.round(2 / PANEL_SUN_FACE_BIN_WIDTH);
+  const frontFaceBins: PanelSunFaceBin[] = [];
+  for (let vIndex = 0; vIndex < faceBinsPerAxis; vIndex++) {
+    for (let uIndex = 0; uIndex < faceBinsPerAxis; uIndex++) {
+      frontFaceBins.push({
+        uMin: -1 + uIndex * PANEL_SUN_FACE_BIN_WIDTH,
+        uMax: -1 + (uIndex + 1) * PANEL_SUN_FACE_BIN_WIDTH,
+        vMin: -1 + vIndex * PANEL_SUN_FACE_BIN_WIDTH,
+        vMax: -1 + (vIndex + 1) * PANEL_SUN_FACE_BIN_WIDTH,
+        sunlitDurationSec: 0,
+        equivalentSunSec: 0,
+      });
+    }
+  }
   let durationSec = 0;
   let weightedAngleSum = 0;
   let within45Sec = 0;
   let within90Sec = 0;
+  let backsideSunlitSec = 0;
 
-  for (const sample of samples) {
+  for (const sample of sunlitSamples) {
     durationSec += sample.durationSec;
     weightedAngleSum += sample.angleDeg * sample.durationSec;
     if (sample.angleDeg <= 45) within45Sec += sample.durationSec;
@@ -602,23 +719,368 @@ export function computePanelSunAngle(data: VizData): PanelSunAngleSummary {
     const binIndex = Math.min(bins.length - 1, Math.floor(sample.angleDeg / PANEL_SUN_BIN_WIDTH_DEG));
     const durations = bins[binIndex].durationSecByMode;
     durations[sample.mode] = (durations[sample.mode] ?? 0) + sample.durationSec;
+    if (sample.panelDot >= 0) {
+      const uIndex = Math.min(
+        faceBinsPerAxis - 1,
+        Math.max(0, Math.floor((sample.panelU + 1) / PANEL_SUN_FACE_BIN_WIDTH)),
+      );
+      const vIndex = Math.min(
+        faceBinsPerAxis - 1,
+        Math.max(0, Math.floor((sample.panelV + 1) / PANEL_SUN_FACE_BIN_WIDTH)),
+      );
+      const faceBin = frontFaceBins[vIndex * faceBinsPerAxis + uIndex];
+      faceBin.sunlitDurationSec += sample.durationSec;
+      faceBin.equivalentSunSec += sample.durationSec * sample.panelDot;
+    } else {
+      backsideSunlitSec += sample.durationSec;
+    }
   }
 
-  const angles = samples.map((sample) => sample.angleDeg);
+  const angles = sunlitSamples.map((sample) => sample.angleDeg);
   return {
     available: true,
     unavailableReason: null,
     panelNormalSc,
-    samples: samples.length,
+    samples: sunlitSamples.length,
     durationSec,
     minDeg: Math.min(...angles),
     meanDeg: weightedAngleSum / durationSec,
-    medianDeg: weightedMedianAngle(samples, durationSec),
+    medianDeg: weightedMedianAngle(sunlitSamples, durationSec),
     maxDeg: Math.max(...angles),
     within45Sec,
     within90Sec,
     modes: PANEL_SUN_MODE_ORDER.filter((mode) => activeModes.has(mode)),
     bins,
+    panelBasisUSc: vectorTuple(azimuthBasis.u),
+    panelBasisVSc: vectorTuple(azimuthBasis.v),
+    frontFaceBins,
+    backsideSunlitSec,
+  };
+}
+
+function emptyThermalGeometry(reason: string): ThermalGeometrySummary {
+  return {
+    available: false,
+    unavailableReason: reason,
+    samples: [],
+    durationSec: 0,
+    sunlitSec: 0,
+    eclipseSec: 0,
+    earthAngularRadiusMinDeg: null,
+    earthAngularRadiusMeanDeg: null,
+    earthAngularRadiusMaxDeg: null,
+    sunDwellBins: [],
+    earthDwellBins: [],
+    surfaces: [],
+  };
+}
+
+const BODY_FACE_BASES: Array<{
+  face: string;
+  normal: [number, number, number];
+  u: [number, number, number];
+  v: [number, number, number];
+}> = [
+  { face: "+X", normal: [1, 0, 0], u: [0, 1, 0], v: [0, 0, 1] },
+  { face: "-X", normal: [-1, 0, 0], u: [0, -1, 0], v: [0, 0, 1] },
+  { face: "+Y", normal: [0, 1, 0], u: [-1, 0, 0], v: [0, 0, 1] },
+  { face: "-Y", normal: [0, -1, 0], u: [1, 0, 0], v: [0, 0, 1] },
+  { face: "+Z", normal: [0, 0, 1], u: [1, 0, 0], v: [0, 1, 0] },
+  { face: "-Z", normal: [0, 0, -1], u: [1, 0, 0], v: [0, -1, 0] },
+];
+
+function tupleDot(a: [number, number, number], b: [number, number, number]): number {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+function directionFaceDwellBins(
+  samples: BodyDirectionSample[],
+  source: "sun" | "earth",
+): BodyFaceDwellBin[] {
+  const binCount = 2 / BODY_FACE_BIN_WIDTH;
+  const durations = new Map<string, number>();
+
+  for (const sample of samples) {
+    if (source === "sun" && sample.inEclipse) continue;
+    const direction = source === "sun" ? sample.sunBody : sample.earthBody;
+    const basis = BODY_FACE_BASES.reduce((best, candidate) =>
+      tupleDot(direction, candidate.normal) > tupleDot(direction, best.normal) ? candidate : best,
+    );
+    const faceProjection = tupleDot(direction, basis.normal);
+    const u = Math.max(-1, Math.min(1, tupleDot(direction, basis.u) / faceProjection));
+    const v = Math.max(-1, Math.min(1, tupleDot(direction, basis.v) / faceProjection));
+    const uIndex = Math.max(0, Math.min(binCount - 1, Math.floor((u + 1) / BODY_FACE_BIN_WIDTH)));
+    const vIndex = Math.max(0, Math.min(binCount - 1, Math.floor((v + 1) / BODY_FACE_BIN_WIDTH)));
+    const key = `${basis.face}:${uIndex}:${vIndex}`;
+    durations.set(key, (durations.get(key) ?? 0) + sample.durationSec);
+  }
+
+  return [...durations.entries()]
+    .map(([key, durationSec]) => {
+      const [face, uIndexRaw, vIndexRaw] = key.split(":");
+      const uIndex = Number(uIndexRaw);
+      const vIndex = Number(vIndexRaw);
+      return {
+        face,
+        uMin: -1 + uIndex * BODY_FACE_BIN_WIDTH,
+        uMax: -1 + (uIndex + 1) * BODY_FACE_BIN_WIDTH,
+        vMin: -1 + vIndex * BODY_FACE_BIN_WIDTH,
+        vMax: -1 + (vIndex + 1) * BODY_FACE_BIN_WIDTH,
+        durationSec,
+      };
+    })
+    .sort((a, b) => {
+      const faceOrder = BODY_FACE_BASES.findIndex((basis) => basis.face === a.face) -
+        BODY_FACE_BASES.findIndex((basis) => basis.face === b.face);
+      if (faceOrder !== 0) return faceOrder;
+      return a.vMin - b.vMin || a.uMin - b.uMin;
+    });
+}
+
+function positiveAzimuthIntegral(offset: number, amplitude: number): number {
+  if (amplitude <= 0) return 2 * Math.PI * Math.max(0, offset);
+  if (offset >= amplitude) return 2 * Math.PI * offset;
+  if (offset <= -amplitude) return 0;
+  const halfWidth = Math.acos(-offset / amplitude);
+  return 2 * (offset * halfWidth + amplitude * Math.sin(halfWidth));
+}
+
+function adaptiveSimpson(
+  fn: (value: number) => number,
+  lower: number,
+  upper: number,
+  tolerance: number,
+  maxDepth: number,
+): number {
+  const midpoint = (lower + upper) / 2;
+  const fLower = fn(lower);
+  const fMidpoint = fn(midpoint);
+  const fUpper = fn(upper);
+  const whole = ((upper - lower) * (fLower + 4 * fMidpoint + fUpper)) / 6;
+
+  const refine = (
+    start: number,
+    end: number,
+    fStart: number,
+    fMiddle: number,
+    fEnd: number,
+    estimate: number,
+    target: number,
+    depth: number,
+  ): number => {
+    const middle = (start + end) / 2;
+    const leftMiddle = (start + middle) / 2;
+    const rightMiddle = (middle + end) / 2;
+    const fLeftMiddle = fn(leftMiddle);
+    const fRightMiddle = fn(rightMiddle);
+    const left = ((middle - start) * (fStart + 4 * fLeftMiddle + fMiddle)) / 6;
+    const right = ((end - middle) * (fMiddle + 4 * fRightMiddle + fEnd)) / 6;
+    const correction = left + right - estimate;
+    if (depth <= 0 || Math.abs(correction) <= 15 * target) {
+      return left + right + correction / 15;
+    }
+    return refine(start, middle, fStart, fLeftMiddle, fMiddle, left, target / 2, depth - 1) +
+      refine(middle, end, fMiddle, fRightMiddle, fEnd, right, target / 2, depth - 1);
+  };
+
+  return refine(lower, upper, fLower, fMidpoint, fUpper, whole, tolerance, maxDepth);
+}
+
+/**
+ * Radiative view factor from a differential flat surface to Earth's apparent
+ * disk. Full and hidden disks are analytic. For a horizon-clipped disk, the
+ * positive projected cosine is integrated analytically around each ring and
+ * adaptively across the disk radius.
+ */
+function earthDiskViewFactor(
+  normal: THREE.Vector3,
+  earthCenter: THREE.Vector3,
+  angularRadiusRad: number,
+): number {
+  const centerCosine = Math.max(-1, Math.min(1, normal.dot(earthCenter)));
+  const centerAngle = Math.acos(centerCosine);
+  const halfPi = Math.PI / 2;
+  if (centerAngle - angularRadiusRad >= halfPi) return 0;
+  if (centerAngle + angularRadiusRad <= halfPi) {
+    return Math.max(0, Math.min(1, Math.sin(angularRadiusRad) ** 2 * centerCosine));
+  }
+
+  const centerSine = Math.sqrt(Math.max(0, 1 - centerCosine * centerCosine));
+  const integral = adaptiveSimpson(
+    (rho) => {
+      const offset = centerCosine * Math.cos(rho);
+      const amplitude = centerSine * Math.sin(rho);
+      return positiveAzimuthIntegral(offset, amplitude) * Math.sin(rho);
+    },
+    0,
+    angularRadiusRad,
+    1e-10,
+    16,
+  );
+  return Math.max(0, Math.min(1, integral / Math.PI));
+}
+
+function computeSurfaceExposure(
+  name: string,
+  normalSc: [number, number, number],
+  samples: BodyDirectionSample[],
+  durationSec: number,
+): SurfaceExposureSummary {
+  const normal = new THREE.Vector3(...normalSc).normalize();
+  let directSunEquivalentSec = 0;
+  let peakSunCosine = 0;
+  let sunAbove10PercentSec = 0;
+  let sunAbove50PercentSec = 0;
+  let sunAbove90PercentSec = 0;
+  let currentAbove10PercentSec = 0;
+  let longestAbove10PercentSec = 0;
+  let earthViewFactorSec = 0;
+  let peakEarthViewFactor = 0;
+  let previousEnd: number | null = null;
+
+  for (const sample of samples) {
+    if (previousEnd !== null && Math.abs(sample.time - previousEnd) > 1e-6) {
+      currentAbove10PercentSec = 0;
+    }
+    previousEnd = sample.time + sample.durationSec;
+
+    const sunCosine = sample.inEclipse
+      ? 0
+      : Math.max(0, normal.dot(new THREE.Vector3(...sample.sunBody)));
+    if (sunCosine > 0) {
+      directSunEquivalentSec += sunCosine * sample.durationSec;
+      peakSunCosine = Math.max(peakSunCosine, sunCosine);
+    }
+    if (sunCosine >= 0.1) {
+      sunAbove10PercentSec += sample.durationSec;
+      currentAbove10PercentSec += sample.durationSec;
+      longestAbove10PercentSec = Math.max(longestAbove10PercentSec, currentAbove10PercentSec);
+    } else {
+      currentAbove10PercentSec = 0;
+    }
+    if (sunCosine >= 0.5) sunAbove50PercentSec += sample.durationSec;
+    if (sunCosine >= 0.9) sunAbove90PercentSec += sample.durationSec;
+
+    const earthViewFactor = earthDiskViewFactor(
+      normal,
+      new THREE.Vector3(...sample.earthBody),
+      (sample.earthAngularRadiusDeg * Math.PI) / 180,
+    );
+    earthViewFactorSec += earthViewFactor * sample.durationSec;
+    peakEarthViewFactor = Math.max(peakEarthViewFactor, earthViewFactor);
+  }
+
+  const meanEarthViewFactor = durationSec > 0 ? earthViewFactorSec / durationSec : 0;
+  return {
+    name,
+    normalSc,
+    directSunEquivalentSec,
+    peakSunCosine,
+    sunAbove10PercentSec,
+    sunAbove50PercentSec,
+    sunAbove90PercentSec,
+    longestAbove10PercentSec,
+    meanEarthViewFactor,
+    peakEarthViewFactor,
+    meanDeepSpaceViewFactor: 1 - meanEarthViewFactor,
+    minimumDeepSpaceViewFactor: 1 - peakEarthViewFactor,
+  };
+}
+
+/** Summarize body-frame source directions and per-surface exposure geometry. */
+export function computeThermalGeometry(data: VizData): ThermalGeometrySummary {
+  const ephem = data.ephem;
+  const n = ephem.utime.length;
+  const quaternions = [ephem.quat_w, ephem.quat_x, ephem.quat_y, ephem.quat_z];
+  if (n < 2 || quaternions.some((values) => !Array.isArray(values) || values.length !== n)) {
+    return emptyThermalGeometry("complete attitude quaternion telemetry is unavailable");
+  }
+  if (ephem.sunvec.length !== n || ephem.posvec.length !== n || ephem.ineclipse.length !== n) {
+    return emptyThermalGeometry("Sun, position, or eclipse telemetry length does not match ephemeris time");
+  }
+
+  const qw = ephem.quat_w as number[];
+  const qx = ephem.quat_x as number[];
+  const qy = ephem.quat_y as number[];
+  const qz = ephem.quat_z as number[];
+  const entries = sortedValidEntries(data.ppst);
+  const samples: BodyDirectionSample[] = [];
+
+  for (let i = 0; i < n - 1; i++) {
+    const durationSec = positiveDuration(ephem.utime[i], ephem.utime[i + 1]);
+    const sun = vec3(ephem.sunvec[i]);
+    const position = vec3(ephem.posvec[i]);
+    if (durationSec <= 0 || !sun || sun.lengthSq() === 0 || !position) continue;
+    const radiusKm = position.length();
+    if (radiusKm <= EARTH_RADIUS_KM || ![qw[i], qx[i], qy[i], qz[i]].every(finiteNumber)) continue;
+
+    const inertialToBody = new THREE.Quaternion(qx[i], qy[i], qz[i], qw[i]);
+    if (inertialToBody.lengthSq() === 0) continue;
+    inertialToBody.normalize();
+    const sunBody = sun.normalize().applyQuaternion(inertialToBody);
+    const earthBody = position.normalize().multiplyScalar(-1).applyQuaternion(inertialToBody);
+    samples.push({
+      time: ephem.utime[i],
+      durationSec,
+      mode: panelSunMode(data, entries, i, ephem.utime[i]),
+      inEclipse: numericField(ephem.ineclipse[i]) > 0,
+      sunBody: vectorTuple(sunBody),
+      earthBody: vectorTuple(earthBody),
+      earthAngularRadiusDeg: (Math.asin(EARTH_RADIUS_KM / radiusKm) * 180) / Math.PI,
+    });
+  }
+
+  if (samples.length === 0) {
+    return emptyThermalGeometry("no valid body-frame direction intervals are available");
+  }
+
+  const durationSec = samples.reduce((total, sample) => total + sample.durationSec, 0);
+  const eclipseSec = samples.reduce(
+    (total, sample) => total + (sample.inEclipse ? sample.durationSec : 0),
+    0,
+  );
+  const earthRadii = samples.map((sample) => sample.earthAngularRadiusDeg);
+  const weightedEarthRadius = samples.reduce(
+    (total, sample) => total + sample.earthAngularRadiusDeg * sample.durationSec,
+    0,
+  );
+  const surfaceDefinitions: Array<{ name: string; normal: [number, number, number] }> = [
+    { name: "+X", normal: [1, 0, 0] },
+    { name: "-X", normal: [-1, 0, 0] },
+    { name: "+Y", normal: [0, 1, 0] },
+    { name: "-Y", normal: [0, -1, 0] },
+    { name: "+Z", normal: [0, 0, 1] },
+    { name: "-Z", normal: [0, 0, -1] },
+  ];
+  const panel = vec3(data.meta.solar_panel?.direction_sc);
+  if (panel && panel.lengthSq() > 0) {
+    panel.normalize();
+    const panelNormal = vectorTuple(panel);
+    const alignedFace = surfaceDefinitions.find(
+      (surface) => tupleDot(surface.normal, panelNormal) > 1 - 1e-9,
+    );
+    if (alignedFace) {
+      alignedFace.name = `${alignedFace.name} / solar panel`;
+    } else {
+      surfaceDefinitions.push({ name: "Solar panel", normal: panelNormal });
+    }
+  }
+
+  return {
+    available: true,
+    unavailableReason: null,
+    samples,
+    durationSec,
+    sunlitSec: durationSec - eclipseSec,
+    eclipseSec,
+    earthAngularRadiusMinDeg: Math.min(...earthRadii),
+    earthAngularRadiusMeanDeg: weightedEarthRadius / durationSec,
+    earthAngularRadiusMaxDeg: Math.max(...earthRadii),
+    sunDwellBins: directionFaceDwellBins(samples, "sun"),
+    earthDwellBins: directionFaceDwellBins(samples, "earth"),
+    surfaces: surfaceDefinitions.map((surface) =>
+      computeSurfaceExposure(surface.name, surface.normal, samples, durationSec),
+    ),
   };
 }
 
@@ -1700,6 +2162,7 @@ export function buildPlanStats(data: VizData, options: PlanStatsOptions = {}): P
     gspExecution,
     orbitContext: computeOrbitContext(data, eclipseSegments),
     panelSunAngle: computePanelSunAngle(data),
+    thermalGeometry: computeThermalGeometry(data),
     science: computeScienceSummary(data.ppst),
     timeline: computeTimeline(data, entries, gaps, start, end, eclipseSegments),
     slewDistribution: computeSlewDistribution(slews),
