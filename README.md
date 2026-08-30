@@ -93,7 +93,8 @@ executed inertial-to-body quaternion telemetry. It includes:
 
 - panel Sun-incidence angle and a front-face map showing which body-axis side
   the Sun comes from;
-- shared-scale Sun and Earth-center cube maps on the six spacecraft body faces;
+- optional shared-scale Sun and Earth-center cube maps on the six spacecraft
+  body faces under Advanced direction maps;
 - body-frame Sun/Earth direction-cosine time series; and
 - direct-Sun projection, Earth-disk view factor, and complementary clear-sky
   view factor for each body face and the configured panel normal.
