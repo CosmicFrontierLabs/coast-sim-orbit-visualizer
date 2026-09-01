@@ -19,10 +19,14 @@ FROM python:3.12
 
 # Node is only needed to build the orbit-visualizer frontend bundle at install time.
 ARG NODE_VERSION=20.18.0
+ARG ORBIT_VISUALIZER_REVISION=unknown
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    ORBIT_VISUALIZER_REVISION=${ORBIT_VISUALIZER_REVISION}
+
+LABEL org.opencontainers.image.revision=${ORBIT_VISUALIZER_REVISION}
 
 # Node.js from the official tarball (no apt); the frontend build hook runs
 # `npm run build` to produce the dist/ bundle when installed from source.

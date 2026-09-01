@@ -85,6 +85,8 @@ jobs:
         with:
           context: .
           push: ${{ github.event_name == 'push' }}
+          build-args: |
+            ORBIT_VISUALIZER_REVISION=${{ github.sha }}
           tags: |
             ${{ env.IMAGE }}:latest
             ${{ env.IMAGE }}:${{ github.sha }}

@@ -35,7 +35,7 @@ from fastapi.staticfiles import StaticFiles
 
 from conops.targets.plan_schema import PlanSchema
 
-from .sources import load_json_source
+from .sources import RefreshingJSONSource, load_json_source
 
 app = FastAPI(
     title="Orbit Visualizer API",
@@ -116,6 +116,22 @@ if not _TEXTURES_DIR.is_dir() and _ALLOW_REPO_FALLBACK:
 # In-memory DITL payload set by launch() / set_data()
 _data: dict | None = None
 _viz_data: dict | None = None
+_viz_data_source: RefreshingJSONSource | None = None
+
+
+def _viz_data_refresh_interval() -> float:
+    raw = os.environ.get("ORBIT_VISUALIZER_VIZ_DATA_REFRESH_SECONDS", "0")
+    try:
+        interval = float(raw)
+    except ValueError as exc:
+        raise ValueError(
+            "ORBIT_VISUALIZER_VIZ_DATA_REFRESH_SECONDS must be a number"
+        ) from exc
+    if interval < 0:
+        raise ValueError(
+            "ORBIT_VISUALIZER_VIZ_DATA_REFRESH_SECONDS must be non-negative"
+        )
+    return interval
 
 
 def set_data(payload: dict) -> None:
@@ -126,8 +142,9 @@ def set_data(payload: dict) -> None:
 
 def set_viz_data(payload: dict) -> None:
     """Load the 3-D VizData payload for the frontend."""
-    global _viz_data
+    global _viz_data, _viz_data_source
     _viz_data = payload
+    _viz_data_source = None
 
 
 def set_model_dir(path: str | Path) -> None:
@@ -143,10 +160,26 @@ def set_model_base_uri(uri: str) -> None:
     _MODEL_BASE_URI = uri.rstrip("/") or None
 
 
-def set_viz_data_source(source: str) -> None:
+def set_viz_data_source(
+    source: str, *, refresh_interval_seconds: float | None = None
+) -> None:
     """Load viz data from a path/URI, deriving the shared-bucket model base."""
-    global _DERIVED_MODEL_BASE_URI
-    set_viz_data(load_json_source(source))
+    global _DERIVED_MODEL_BASE_URI, _viz_data, _viz_data_source
+    if urlsplit(source).scheme.lower() in ("http", "https"):
+        refresh_interval = (
+            _viz_data_refresh_interval()
+            if refresh_interval_seconds is None
+            else refresh_interval_seconds
+        )
+        refreshing_source = RefreshingJSONSource(
+            source, refresh_interval=refresh_interval
+        )
+        payload = refreshing_source.get(force=True)
+    else:
+        refreshing_source = None
+        payload = load_json_source(source)
+    _viz_data = payload
+    _viz_data_source = refreshing_source
     _DERIVED_MODEL_BASE_URI = derive_model_base_uri(source)
 
 
@@ -186,6 +219,7 @@ async def disable_frontend_caching(request: Request, call_next):
     path = request.url.path
     is_frontend = (
         path == "/"
+        or path == "/viz-data"
         or path.startswith("/assets/")
         or path.startswith("/model/")
         or path.startswith("/textures/")
@@ -221,6 +255,9 @@ def index() -> Response:
 @app.get("/viz-data")
 def get_viz_data() -> dict:
     """Return VizData payload for the 3-D orbit visualizer frontend."""
+    global _viz_data
+    if _viz_data_source is not None:
+        _viz_data = _viz_data_source.get()
     if _viz_data is None:
         raise HTTPException(
             status_code=404,
@@ -231,7 +268,21 @@ def get_viz_data() -> dict:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    result = {
+        "status": "ok",
+        "revision": os.environ.get("ORBIT_VISUALIZER_REVISION", "unknown"),
+    }
+    if _viz_data_source is not None:
+        source_status = _viz_data_source.status()
+        result["viz_data"] = source_status
+        if source_status["last_error"] is not None:
+            result["status"] = "degraded"
+    else:
+        result["viz_data"] = {
+            "source": "in-memory",
+            "loaded": _viz_data is not None,
+        }
+    return result
 
 
 @app.get("/data")
