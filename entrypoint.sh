@@ -28,7 +28,7 @@
 #   ORBIT_VIS_PORT       bind port      (default 8000)
 #   ORBIT_VIS_LOG_LEVEL  uvicorn level  (default info)
 #   VIZ_DATA_REFRESH_SECONDS  minimum seconds between source revalidation checks
-#                             (default 60; 0 checks on every /viz-data request)
+#                             (default 0: check on every /viz-data request)
 #
 set -euo pipefail
 

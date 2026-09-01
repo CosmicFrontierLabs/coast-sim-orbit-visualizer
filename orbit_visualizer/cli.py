@@ -38,7 +38,7 @@ def main() -> None:
         type=float,
         help=(
             "Minimum seconds between viz-data source revalidation checks "
-            "(default: ORBIT_VISUALIZER_VIZ_DATA_REFRESH_SECONDS or 60)"
+            "(default: ORBIT_VISUALIZER_VIZ_DATA_REFRESH_SECONDS or 0)"
         ),
     )
     parser.add_argument(

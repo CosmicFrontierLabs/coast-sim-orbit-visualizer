@@ -120,7 +120,7 @@ _viz_data_source: RefreshingJSONSource | None = None
 
 
 def _viz_data_refresh_interval() -> float:
-    raw = os.environ.get("ORBIT_VISUALIZER_VIZ_DATA_REFRESH_SECONDS", "60")
+    raw = os.environ.get("ORBIT_VISUALIZER_VIZ_DATA_REFRESH_SECONDS", "0")
     try:
         interval = float(raw)
     except ValueError as exc:

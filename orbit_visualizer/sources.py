@@ -89,7 +89,7 @@ class RefreshingJSONSource:
         self,
         src: str,
         *,
-        refresh_interval: float = 60.0,
+        refresh_interval: float = 0.0,
         timeout: float = DEFAULT_TIMEOUT,
     ) -> None:
         self.src = str(src)

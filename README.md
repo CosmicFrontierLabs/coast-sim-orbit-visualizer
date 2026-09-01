@@ -54,12 +54,12 @@ directly. Public URLs need no credentials:
 orbit-visualizer --viz-data https://bucket.example.com/plan/latest/viz_data.json
 ```
 
-Remote viz-data sources are conditionally revalidated at most once every 60
-seconds. If a refresh fails or returns invalid JSON, the server continues to
-serve the last valid payload and reports the error through `/health`. Override
-the interval with `--viz-data-refresh-seconds` (use `0` to check on every
-request) or `ORBIT_VISUALIZER_VIZ_DATA_REFRESH_SECONDS` when running via
-`uvicorn`.
+Remote viz-data sources are conditionally revalidated on every `/viz-data`
+request, so a browser reload sees newly published data without downloading an
+unchanged payload. If a refresh fails or returns invalid JSON, the server
+continues to serve the last valid payload and reports the error through
+`/health`. Set a positive minimum interval with `--viz-data-refresh-seconds` or
+`ORBIT_VISUALIZER_VIZ_DATA_REFRESH_SECONDS` when request throttling is desired.
 
 or with `uvicorn` directly:
 

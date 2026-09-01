@@ -140,7 +140,7 @@ class RefreshingJSONSourceTests(unittest.TestCase):
         self.server.server_close()
 
     def test_conditional_refresh_reuses_unchanged_payload(self) -> None:
-        source = RefreshingJSONSource(self.url, refresh_interval=0)
+        source = RefreshingJSONSource(self.url)
 
         first = source.get()
         second = source.get()
@@ -156,6 +156,7 @@ class RefreshingJSONSourceTests(unittest.TestCase):
             },
         )
         status = source.status()
+        self.assertEqual(status["refresh_interval_seconds"], 0)
         self.assertEqual(status["etag"], '"v1"')
         self.assertIsNone(status["last_error"])
 
