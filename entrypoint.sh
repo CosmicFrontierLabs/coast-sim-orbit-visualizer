@@ -27,6 +27,8 @@
 #   ORBIT_VIS_HOST       bind host      (default 0.0.0.0)
 #   ORBIT_VIS_PORT       bind port      (default 8000)
 #   ORBIT_VIS_LOG_LEVEL  uvicorn level  (default info)
+#   VIZ_DATA_REFRESH_SECONDS  minimum seconds between source revalidation checks
+#                             (default 60; 0 checks on every /viz-data request)
 #
 set -euo pipefail
 
@@ -48,6 +50,10 @@ fi
 
 if [[ -n "${MODEL_BASE_URI:-}" ]]; then
   args+=(--model-base-uri "${MODEL_BASE_URI}")
+fi
+
+if [[ -n "${VIZ_DATA_REFRESH_SECONDS:-}" ]]; then
+  args+=(--viz-data-refresh-seconds "${VIZ_DATA_REFRESH_SECONDS}")
 fi
 
 exec python -m orbit_visualizer.cli \

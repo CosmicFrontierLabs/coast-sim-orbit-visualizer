@@ -34,6 +34,14 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--viz-data-refresh-seconds",
+        type=float,
+        help=(
+            "Minimum seconds between viz-data source revalidation checks "
+            "(default: ORBIT_VISUALIZER_VIZ_DATA_REFRESH_SECONDS or 60)"
+        ),
+    )
+    parser.add_argument(
         "--model-dir",
         type=_existing_dir,
         help="Optional directory served at /model for spacecraft.glb and spacecraft.config.json.",
@@ -64,7 +72,10 @@ def main() -> None:
     if args.data is not None:
         app_module.set_data(load_json_source(args.data))
     if args.viz_data is not None:
-        app_module.set_viz_data_source(args.viz_data)
+        app_module.set_viz_data_source(
+            args.viz_data,
+            refresh_interval_seconds=args.viz_data_refresh_seconds,
+        )
     if args.model_dir is not None:
         app_module.set_model_dir(args.model_dir)
     if args.model_base_uri is not None:
