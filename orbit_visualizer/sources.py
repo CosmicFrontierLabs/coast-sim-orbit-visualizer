@@ -16,9 +16,11 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import threading
 import time
 from datetime import datetime, timezone
+from http.client import HTTPException as HTTPClientException
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError
@@ -76,12 +78,11 @@ def load_json_source(src: str, *, timeout: float = DEFAULT_TIMEOUT) -> dict:
 
 
 class RefreshingJSONSource:
-    """Cache a JSON object while periodically revalidating its source.
+    """Cache a remote JSON object while periodically revalidating its source.
 
-    HTTP(S) sources use conditional requests after the initial load. Local paths
-    and ``file://`` URIs are reread after the refresh interval. Once a valid
-    payload has loaded, a transient read or validation failure preserves that
-    last-known-good payload and is reported through :attr:`status`.
+    HTTP(S) sources use conditional requests after the initial load. Once a
+    valid payload has loaded, a transient read or validation failure preserves
+    that last-known-good payload and is reported through :attr:`status`.
     """
 
     def __init__(
@@ -91,10 +92,13 @@ class RefreshingJSONSource:
         refresh_interval: float = 60.0,
         timeout: float = DEFAULT_TIMEOUT,
     ) -> None:
-        if refresh_interval < 0:
-            raise ValueError("refresh_interval must be non-negative")
         self.src = str(src)
-        self.refresh_interval = float(refresh_interval)
+        if urlparse(self.src).scheme.lower() not in ("http", "https"):
+            raise ValueError("RefreshingJSONSource requires an HTTP(S) source")
+        interval = float(refresh_interval)
+        if not math.isfinite(interval) or interval < 0:
+            raise ValueError("refresh_interval must be finite and non-negative")
+        self.refresh_interval = interval
         self.timeout = float(timeout)
         self._lock = threading.Lock()
         self._payload: dict | None = None
@@ -131,12 +135,6 @@ class RefreshingJSONSource:
                 return None, self._etag, self._source_last_modified
             raise
 
-    def _read(self) -> tuple[dict | None, str | None, str | None]:
-        scheme = urlparse(self.src).scheme.lower()
-        if scheme in ("http", "https"):
-            return self._read_remote()
-        return load_json_source(self.src, timeout=self.timeout), None, None
-
     def get(self, *, force: bool = False) -> dict:
         """Return the latest valid payload, refreshing when the interval expires."""
         with self._lock:
@@ -153,8 +151,8 @@ class RefreshingJSONSource:
 
             self._last_check_monotonic = now
             try:
-                payload, etag, source_last_modified = self._read()
-            except (OSError, ValueError) as exc:
+                payload, etag, source_last_modified = self._read_remote()
+            except (HTTPClientException, OSError, ValueError) as exc:
                 self._checked_at = self._utc_now()
                 self._last_error = f"{type(exc).__name__}: {exc}"
                 if self._payload is None:

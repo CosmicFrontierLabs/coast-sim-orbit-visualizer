@@ -165,15 +165,19 @@ def set_viz_data_source(
 ) -> None:
     """Load viz data from a path/URI, deriving the shared-bucket model base."""
     global _DERIVED_MODEL_BASE_URI, _viz_data, _viz_data_source
-    refresh_interval = (
-        _viz_data_refresh_interval()
-        if refresh_interval_seconds is None
-        else refresh_interval_seconds
-    )
-    refreshing_source = RefreshingJSONSource(
-        source, refresh_interval=refresh_interval
-    )
-    payload = refreshing_source.get(force=True)
+    if urlsplit(source).scheme.lower() in ("http", "https"):
+        refresh_interval = (
+            _viz_data_refresh_interval()
+            if refresh_interval_seconds is None
+            else refresh_interval_seconds
+        )
+        refreshing_source = RefreshingJSONSource(
+            source, refresh_interval=refresh_interval
+        )
+        payload = refreshing_source.get(force=True)
+    else:
+        refreshing_source = None
+        payload = load_json_source(source)
     _viz_data = payload
     _viz_data_source = refreshing_source
     _DERIVED_MODEL_BASE_URI = derive_model_base_uri(source)

@@ -31,6 +31,7 @@ class _RefreshingJSONHandler(BaseHTTPRequestHandler):
     etag = '"v1"'
     last_modified = "Mon, 31 Aug 2026 06:41:05 GMT"
     status_code = 200
+    truncate_body = False
     request_headers: list[dict[str, str | None]] = []
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
@@ -49,7 +50,8 @@ class _RefreshingJSONHandler(BaseHTTPRequestHandler):
             return
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(self.body)))
+        content_length = len(self.body) + 10 if self.truncate_body else len(self.body)
+        self.send_header("Content-Length", str(content_length))
         self.send_header("ETag", self.etag)
         self.send_header("Last-Modified", self.last_modified)
         self.end_headers()
@@ -124,6 +126,7 @@ class RefreshingJSONSourceTests(unittest.TestCase):
         _RefreshingJSONHandler.etag = '"v1"'
         _RefreshingJSONHandler.last_modified = "Mon, 31 Aug 2026 06:41:05 GMT"
         _RefreshingJSONHandler.status_code = 200
+        _RefreshingJSONHandler.truncate_body = False
         _RefreshingJSONHandler.request_headers = []
         self.server = HTTPServer(("127.0.0.1", 0), _RefreshingJSONHandler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -192,6 +195,16 @@ class RefreshingJSONSourceTests(unittest.TestCase):
         self.assertEqual(source.get(), {"version": 1})
         self.assertIn("HTTPError", source.status()["last_error"])
 
+    def test_truncated_update_preserves_last_valid_payload(self) -> None:
+        source = RefreshingJSONSource(self.url, refresh_interval=0)
+        self.assertEqual(source.get(), {"version": 1})
+
+        _RefreshingJSONHandler.body = b'{"version": 2}'
+        _RefreshingJSONHandler.etag = '"v2"'
+        _RefreshingJSONHandler.truncate_body = True
+        self.assertEqual(source.get(), {"version": 1})
+        self.assertIn("IncompleteRead", source.status()["last_error"])
+
     def test_refresh_interval_avoids_rechecking_source(self) -> None:
         source = RefreshingJSONSource(self.url, refresh_interval=3600)
         self.assertEqual(source.get(), {"version": 1})
@@ -202,21 +215,21 @@ class RefreshingJSONSourceTests(unittest.TestCase):
         self.assertEqual(len(_RefreshingJSONHandler.request_headers), 1)
         self.assertEqual(source.get(force=True), {"version": 2})
 
-    def test_local_file_is_reloaded(self) -> None:
-        with TemporaryDirectory() as tmp:
-            path = Path(tmp) / "viz.json"
-            path.write_text('{"version": 1}', encoding="utf-8")
-            source = RefreshingJSONSource(str(path), refresh_interval=0)
-            self.assertEqual(source.get(), {"version": 1})
-
-            path.write_text('{"version": 2}', encoding="utf-8")
-            self.assertEqual(source.get(), {"version": 2})
-
     def test_initial_failure_is_fatal(self) -> None:
         _RefreshingJSONHandler.status_code = 503
         source = RefreshingJSONSource(self.url, refresh_interval=0)
         with self.assertRaisesRegex(HTTPError, "Service Unavailable"):
             source.get()
+
+    def test_rejects_local_sources(self) -> None:
+        with self.assertRaisesRegex(ValueError, r"HTTP\(S\)"):
+            RefreshingJSONSource("viz_data.json")
+
+    def test_rejects_non_finite_refresh_intervals(self) -> None:
+        for interval in (float("nan"), float("inf"), float("-inf"), -1):
+            with self.subTest(interval=interval):
+                with self.assertRaisesRegex(ValueError, "finite and non-negative"):
+                    RefreshingJSONSource(self.url, refresh_interval=interval)
 
 
 if __name__ == "__main__":
