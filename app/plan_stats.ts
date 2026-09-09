@@ -7,6 +7,8 @@ import {
   type PanelSunAngleSummary,
   type PlanStats,
 } from "../src/plan_stats";
+import { bodyComponentsCsv, type BodyComponentSource } from "../src/body_components_csv";
+import { csvRows } from "../src/csv";
 import type { VizData } from "../src/types";
 import { fmtTime } from "../src/timeline_utils";
 
@@ -951,7 +953,7 @@ function componentPath(
 function renderDirectionComponents(
   rootId: string,
   samples: BodyDirectionSample[],
-  source: "sun" | "earth",
+  source: BodyComponentSource,
 ): void {
   const root = mustEl<HTMLElement>(rootId);
   clear(root);
@@ -1172,17 +1174,31 @@ function renderDirectionComponentTabs(samples: BodyDirectionSample[]): void {
   const tabs = Array.from(
     document.querySelectorAll<HTMLButtonElement>("#body-component-tabs .thermal-tab"),
   );
-  const selectSource = (source: "sun" | "earth"): void => {
+  const exportButton = mustEl<HTMLButtonElement>("export-body-components-csv");
+  let selectedSource: BodyComponentSource = "sun";
+  const selectSource = (source: BodyComponentSource): void => {
+    selectedSource = source;
     tabs.forEach((tab) => {
       const selected = tab.dataset.source === source;
       tab.classList.toggle("is-active", selected);
       tab.setAttribute("aria-selected", String(selected));
     });
     renderDirectionComponents("body-components-chart", samples, source);
+    const sourceLabel = source === "sun" ? "Sun" : "Earth";
+    exportButton.title = `Export ${sourceLabel} body components as CSV`;
+    exportButton.setAttribute("aria-label", exportButton.title);
   };
   tabs.forEach((tab) => {
     tab.onclick = () => selectSource(tab.dataset.source === "earth" ? "earth" : "sun");
   });
+  exportButton.disabled = false;
+  exportButton.onclick = () => {
+    downloadText(
+      `body_components_${selectedSource}.csv`,
+      bodyComponentsCsv(samples, selectedSource),
+      "text/csv;charset=utf-8",
+    );
+  };
   selectSource("sun");
 }
 
@@ -1206,6 +1222,9 @@ function renderThermalGeometry(stats: PlanStats): void {
   clear(tableRoot);
 
   if (!geometry.available) {
+    const exportButton = mustEl<HTMLButtonElement>("export-body-components-csv");
+    exportButton.disabled = true;
+    exportButton.onclick = null;
     const roots = [
       summaryRoot,
       mustEl<HTMLElement>("sun-body-face-map"),
@@ -1651,16 +1670,6 @@ function positionChecksSection(stats: PlanStats): void {
   } else {
     anchor.after(checks);
   }
-}
-
-function csvCell(value: unknown): string {
-  const textValue = value === null || value === undefined ? "" : String(value);
-  if (/[",\n]/.test(textValue)) return `"${textValue.replaceAll('"', '""')}"`;
-  return textValue;
-}
-
-function csvRows(headers: string[], rows: unknown[][]): string {
-  return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
 }
 
 function statsCsv(stats: PlanStats): string {

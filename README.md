@@ -106,6 +106,10 @@ executed inertial-to-body quaternion telemetry. It includes:
 - direct-Sun projection, Earth-disk view factor, and complementary clear-sky
   view factor for each body face and the configured panel normal.
 
+The Body Components chart can export its selected Sun or Earth series as CSV,
+including interval timing, ACS mode, eclipse state, and body-frame direction
+cosines.
+
 `Sun eq.` is the integral of `max(0, normal dot sun_direction)` outside eclipse,
 expressed as equivalent seconds at normal incidence. Sun dwell is reported at
 10%, 50%, and 90% projected-load thresholds so grazing illumination is not

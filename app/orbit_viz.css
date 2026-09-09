@@ -1050,6 +1050,29 @@ body.dragging #drop-overlay {
   font-weight: 600;
 }
 
+.thermal-component-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.thermal-export-button {
+  min-height: 31px;
+  padding: 6px 11px;
+  font-size: 11px;
+}
+
+.thermal-export-button:disabled {
+  border-color: #34415a;
+  color: #667085;
+  cursor: default;
+  opacity: 0.7;
+}
+
+.thermal-export-button:disabled:hover {
+  background: #1a2233;
+}
+
 .thermal-tabs {
   display: inline-flex;
   border: 1px solid #34415a;
@@ -1529,6 +1552,10 @@ td.num {
   .thermal-component-head {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .thermal-component-actions {
+    flex-wrap: wrap;
   }
 
   .gap-class-row {
