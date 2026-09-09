@@ -109,9 +109,12 @@
         <div class="thermal-component-block">
           <div class="thermal-component-head">
             <h3>Body Components</h3>
-            <div id="body-component-tabs" class="thermal-tabs" role="tablist" aria-label="Direction source">
-              <button type="button" class="thermal-tab is-active" data-source="sun" role="tab" aria-selected="true" aria-controls="body-components-chart">Sun</button>
-              <button type="button" class="thermal-tab" data-source="earth" role="tab" aria-selected="false" aria-controls="body-components-chart">Earth</button>
+            <div class="thermal-component-actions">
+              <div id="body-component-tabs" class="thermal-tabs" role="tablist" aria-label="Direction source">
+                <button type="button" class="thermal-tab is-active" data-source="sun" role="tab" aria-selected="true" aria-controls="body-components-chart">Sun</button>
+                <button type="button" class="thermal-tab" data-source="earth" role="tab" aria-selected="false" aria-controls="body-components-chart">Earth</button>
+              </div>
+              <button id="export-body-components-csv" class="thermal-export-button" type="button" disabled>Export CSV</button>
             </div>
           </div>
           <div id="body-components-chart" role="tabpanel"></div>
