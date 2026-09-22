@@ -160,7 +160,7 @@ if (scLabelEl) {
   scLabelEl.style.display = "none";
 }
 const scMarker = createScMarkerController({ scene, camera, scDiagWu: SC_DIAG_WU });
-const groundStationMarkers = createGroundStationMarkerController({ earthMesh });
+const groundStationMarkers = createGroundStationMarkerController({ earthMesh, scene, camera });
 
 // ─── Load data ─────────────────────────────────────────────────────────────────
 
