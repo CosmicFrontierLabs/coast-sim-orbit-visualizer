@@ -254,7 +254,7 @@ export function runVizFrame({
   });
 
   scMarker.update(posW, cameraViewMode);
-  groundStationMarkers.update(simTime, data.ppst);
+  groundStationMarkers.update(simTime, data.ppst, posW);
 
   if (orbitCtl.enabled) {
     orbitCtl.update();
