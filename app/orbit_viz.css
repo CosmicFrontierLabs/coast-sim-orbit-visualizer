@@ -382,7 +382,11 @@ button:hover,
 
 .leg-panel-axis { background: #0f4; }
 
-.leg-panel-sun { background: #ff0; }
+.leg-panel-sun {
+  height: 0;
+  border-top: 3px dashed #ff0;
+  border-radius: 0;
+}
 
 .leg-sc-up { background: #48f; }
 

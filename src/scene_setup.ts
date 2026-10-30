@@ -22,6 +22,31 @@ import {
   SC_DIAG_WU,
 } from "./constants";
 
+export function makeVector(color: number, shaftLen: number, dashed = false): THREE.Group {
+  const group = new THREE.Group();
+  const shaft = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, shaftLen, 0),
+    ]),
+    dashed
+      ? new THREE.LineDashedMaterial({
+          color,
+          dashSize: shaftLen / 24,
+          gapSize: shaftLen / 24,
+        })
+      : new THREE.LineBasicMaterial({ color }),
+  );
+  if (dashed) shaft.computeLineDistances();
+  const head = new THREE.Mesh(
+    new THREE.ConeGeometry(SC_HEAD_W, SC_HEAD_LEN, 14),
+    new THREE.MeshBasicMaterial({ color }),
+  );
+  head.position.y = shaftLen + SC_HEAD_LEN * 0.5;
+  group.add(shaft, head);
+  return group;
+}
+
 /**
  * Compute simplified moon ECI position at a Unix timestamp.
  *
@@ -428,23 +453,6 @@ export function createSceneGraph({ assetBase }: { assetBase: string }) {
   modelGroup.add(fallback);
 
   const _VEC_UP = new THREE.Vector3(0, 1, 0);
-  function makeVector(color: number, shaftLen: number): THREE.Group {
-    const group = new THREE.Group();
-    const shaft = new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(0, 0, 0),
-        new THREE.Vector3(0, shaftLen, 0),
-      ]),
-      new THREE.LineBasicMaterial({ color }),
-    );
-    const head = new THREE.Mesh(
-      new THREE.ConeGeometry(SC_HEAD_W, SC_HEAD_LEN, 14),
-      new THREE.MeshBasicMaterial({ color }),
-    );
-    head.position.y = shaftLen + SC_HEAD_LEN * 0.5;
-    group.add(shaft, head);
-    return group;
-  }
 
   function orientVector(vecObj: THREE.Object3D, dir: THREE.Vector3): void {
     const d = dir.clone();
@@ -467,7 +475,8 @@ export function createSceneGraph({ assetBase }: { assetBase: string }) {
   scGroup.add(axX, axY, axZ);
   const panelGroup = new THREE.Group();
   scGroup.add(panelGroup);
-  const axPanel = makeVector(0xffee00, SC_AXIS_SHAFT_LEN);
+  // Panel normal can coincide with a body axis: expose its line and arrowhead.
+  const axPanel = makeVector(0xffee00, SC_AXIS_SHAFT_LEN * 1.5, true);
   orientVector(axPanel, new THREE.Vector3(0, 0, 1));
   panelGroup.add(axPanel);
   const axVel = makeVector(0xff2222, SC_VEL_SHAFT_LEN);
