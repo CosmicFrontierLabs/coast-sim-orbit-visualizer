@@ -19,7 +19,7 @@
     "@types/luxon": "^3.7.1",
     "@types/three": "^0.183.1",
     "typescript": "^5.9.2",
-    "vite": "^5.4.11",
+    "vite": "^6.4.5",
     "tsx": "^4.19.2"
   },
   "repository": {
